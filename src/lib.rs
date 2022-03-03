@@ -67,6 +67,24 @@ impl<T> DerefMut for ShardedMutexGuard<'_, T> {
     }
 }
 
+impl<T> AsRef<T> for ShardedMutexGuard<'_, T> {
+    fn as_ref(&self) -> &T {
+        unsafe {
+            // SAFETY: the guard gurantees that the we own the object
+            &*self.0 .0.get()
+        }
+    }
+}
+
+impl<T> AsMut<T> for ShardedMutexGuard<'_, T> {
+    fn as_mut(&mut self) -> &mut T {
+        unsafe {
+            // SAFETY: the guard gurantees that the we own the object
+            &mut *self.0 .0.get()
+        }
+    }
+}
+
 impl<T> Drop for ShardedMutexGuard<'_, T> {
     fn drop(&mut self) {
         unsafe {
