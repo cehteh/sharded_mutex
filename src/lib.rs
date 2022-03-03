@@ -10,6 +10,7 @@ use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::RawMutex;
 
 /// Wraps a 'T' that can only be accessed through global mutexes at zero memory overhead per object.
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct ShardedMutex<T>(UnsafeCell<T>);
 
