@@ -1,0 +1,15 @@
+[package]
+name = "sharded_mutex"
+version = "0.1.0"
+authors = ["Christian Thäter <ct@pipapo.org>"]
+edition = "2021"
+description = "Not so bad global locks"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cehteh/sharded_mutex.git"
+keywords = ["locking", "concurrency"]
+
+[dependencies]
+parking_lot = ">= 0.11, <=0.12"
+
+[badges]
+maintenance = { status = "actively-developed" }
