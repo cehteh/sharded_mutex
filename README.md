@@ -7,3 +7,6 @@ the object to be locked.
 Even being sharded, these Mutexes act still as global and non-recursive locks. One must not
 try to lock another object while a lock is already hold, otherwise deadlocks are around the
 corner.
+
+There is one pool of mutexes per guarded type, thus it is possible to lock values of different
+types at the same time.
