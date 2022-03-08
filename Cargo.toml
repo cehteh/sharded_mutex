@@ -1,6 +1,6 @@
 [package]
 name = "sharded_mutex"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Christian Thäter <ct@pipapo.org>"]
 edition = "2021"
 description = "Not so bad global locks"
@@ -10,7 +10,7 @@ keywords = ["locking", "concurrency"]
 
 [dependencies]
 parking_lot = ">= 0.11, <=0.12"
-assoc_static = "0.1.1"
+assoc_static = "0.2.0"
 
 [badges]
 maintenance = { status = "actively-developed" }
