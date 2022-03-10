@@ -3,6 +3,7 @@
 #![warn(rustdoc::missing_crate_level_docs)]
 
 use std::cell::UnsafeCell;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
@@ -11,12 +12,40 @@ pub use parking_lot;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::RawMutex;
 
+/// Every type that shall be used within a ShardedMutex needs to implement some boilerplate
+/// (assoc_static). For common non-generic standard types this is already done. For your own
+/// types you need to implement this by placing `sharded_mutex!(YourType)` into your source.
+/// When some std type is missing, please send me a note or a PR's. Types from external crates
+/// which can't be implemented by 'sharded_mutex' or by yourself need to be wraped in a
+/// newtype. The 'TAG' is required when you want to implement a sharded mutex over foreign
+/// types that are not implemented in your crate. This can be any (non-generic) type your
+/// crate defines, preferably you just make a zero-size struct just for this purpose.
+#[macro_export]
+macro_rules! sharded_mutex {
+    ($T:ty, $TAG:ty) => {
+        $crate::assoc_static!(
+            $T,
+            $TAG,
+            $crate::MutexPool,
+            $crate::MutexPool([$crate::parking_lot::lock_api::RawMutex::INIT; $crate::POOL_SIZE])
+        );
+    };
+    ($T:ty) => {
+        $crate::assoc_static!(
+            $T,
+            (),
+            $crate::MutexPool,
+            $crate::MutexPool([$crate::parking_lot::lock_api::RawMutex::INIT; $crate::POOL_SIZE])
+        );
+    };
+}
+
 /// Wraps a 'T' that can only be accessed through global mutexes at zero memory overhead per object.
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct ShardedMutex<T>(UnsafeCell<T>)
+pub struct ShardedMutex<T, TAG = ()>(UnsafeCell<T>, PhantomData<TAG>)
 where
-    T: AssocStatic<MutexPool, T>;
+    T: AssocStatic<MutexPool, TAG>;
 
 /// Only exported for macro use
 #[doc(hidden)]
@@ -27,12 +56,12 @@ pub const POOL_SIZE: usize = 127;
 #[repr(align(128))] // cache line aligned
 pub struct MutexPool(pub [RawMutex; POOL_SIZE]);
 
-impl<T> ShardedMutex<T>
+impl<T, TAG> ShardedMutex<T, TAG>
 where
-    T: AssocStatic<MutexPool, T>,
+    T: AssocStatic<MutexPool, TAG>,
 {
     fn get_mutex(&self) -> &'static RawMutex {
-        &AssocStatic::<MutexPool, T>::my_static(
+        &AssocStatic::<MutexPool, TAG>::from(
             // SAFETY: only used for getting the type, never dereferenced
             unsafe { &*self.0.get() },
         )
@@ -41,32 +70,30 @@ where
 
     /// Create a new ShardedMutex from the given value.
     pub fn new(value: T) -> Self {
-        ShardedMutex(UnsafeCell::new(value))
+        ShardedMutex(UnsafeCell::new(value), PhantomData)
     }
 
     /// Acquire a global sharded lock guard with unlock on drop semantics
-    pub fn lock(&self) -> ShardedMutexGuard<T> {
+    pub fn lock(&self) -> ShardedMutexGuard<T, TAG> {
         self.get_mutex().lock();
         ShardedMutexGuard(self)
     }
 
     /// Acquire a global sharded lock guard with unlock on drop semantics
-    pub fn try_lock(&self) -> Option<ShardedMutexGuard<T>> {
-        self.get_mutex()
-            .try_lock()
-            .then(|| ShardedMutexGuard(self))
+    pub fn try_lock(&self) -> Option<ShardedMutexGuard<T, TAG>> {
+        self.get_mutex().try_lock().then(|| ShardedMutexGuard(self))
     }
 }
 
 /// The guard returned from locking a ShardedMutex. Dropping this will unlock the mutex.
 /// Access to the underlying value is done by dereferencing this guard.
-pub struct ShardedMutexGuard<'a, T>(&'a ShardedMutex<T>)
+pub struct ShardedMutexGuard<'a, T, TAG>(&'a ShardedMutex<T, TAG>)
 where
-    T: AssocStatic<MutexPool, T>;
+    T: AssocStatic<MutexPool, TAG>;
 
-impl<T> Deref for ShardedMutexGuard<'_, T>
+impl<T, TAG> Deref for ShardedMutexGuard<'_, T, TAG>
 where
-    T: AssocStatic<MutexPool, T>,
+    T: AssocStatic<MutexPool, TAG>,
 {
     type Target = T;
 
@@ -78,9 +105,9 @@ where
     }
 }
 
-impl<T> DerefMut for ShardedMutexGuard<'_, T>
+impl<T, TAG> DerefMut for ShardedMutexGuard<'_, T, TAG>
 where
-    T: AssocStatic<MutexPool, T>,
+    T: AssocStatic<MutexPool, TAG>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
@@ -90,9 +117,9 @@ where
     }
 }
 
-impl<T> AsRef<T> for ShardedMutexGuard<'_, T>
+impl<T, TAG> AsRef<T> for ShardedMutexGuard<'_, T, TAG>
 where
-    T: AssocStatic<MutexPool, T>,
+    T: AssocStatic<MutexPool, TAG>,
 {
     fn as_ref(&self) -> &T {
         unsafe {
@@ -102,9 +129,9 @@ where
     }
 }
 
-impl<T> AsMut<T> for ShardedMutexGuard<'_, T>
+impl<T, TAG> AsMut<T> for ShardedMutexGuard<'_, T, TAG>
 where
-    T: AssocStatic<MutexPool, T>,
+    T: AssocStatic<MutexPool, TAG>,
 {
     fn as_mut(&mut self) -> &mut T {
         unsafe {
@@ -114,9 +141,9 @@ where
     }
 }
 
-impl<T> Drop for ShardedMutexGuard<'_, T>
+impl<T, TAG> Drop for ShardedMutexGuard<'_, T, TAG>
 where
-    T: AssocStatic<MutexPool, T>,
+    T: AssocStatic<MutexPool, TAG>,
 {
     fn drop(&mut self) {
         unsafe {
@@ -124,23 +151,6 @@ where
             self.0.get_mutex().unlock();
         }
     }
-}
-
-/// Every type that shall be used within a ShardedMutex needs to implement some boilerplate
-/// (assoc_static) for common standard types this is already done. For your own types you need
-/// to implement this by placing `sharded_mutex!(YourType)` into your source.  When some std
-/// type is missing, please send me a note or a PR's. Types from external crates which can't
-/// be implemented by 'sharded_mutex' or by yourself need to be wraped in a newtype.
-#[macro_export]
-macro_rules! sharded_mutex {
-    ($T:ty) => {
-        $crate::assoc_static!(
-            $T,
-            $T,
-            $crate::MutexPool,
-            $crate::MutexPool([$crate::parking_lot::lock_api::RawMutex::INIT; $crate::POOL_SIZE])
-        );
-    };
 }
 
 sharded_mutex!(bool);

@@ -14,6 +14,15 @@ fn simple_i32() {
 }
 
 #[test]
+fn std_types_needs_tag() {
+    struct TestTag;
+    sharded_mutex!(Option<bool>, TestTag);
+
+    let x = ShardedMutex::new(Some(true));
+    assert_eq!(*x.lock(), Some(true));
+}
+
+#[test]
 fn own_type1() {
     #[derive(Debug, PartialEq)]
     struct TestType;
