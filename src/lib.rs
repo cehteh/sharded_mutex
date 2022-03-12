@@ -47,6 +47,12 @@ pub struct ShardedMutex<T, TAG = ()>(UnsafeCell<T>, PhantomData<TAG>)
 where
     T: AssocStatic<MutexPool, TAG>;
 
+// SAFETY: Access to the UnsafeCell is protected by the mutex.
+unsafe impl<T, TAG> Sync for ShardedMutex<T, TAG> where T: Send + AssocStatic<MutexPool, TAG> {}
+
+// SAFETY: Access to the UnsafeCell is protected by the mutex.
+unsafe impl<T, TAG> Send for ShardedMutex<T, TAG> where T: Send + AssocStatic<MutexPool, TAG> {}
+
 /// Only exported for macro use
 #[doc(hidden)]
 pub const POOL_SIZE: usize = 127;
