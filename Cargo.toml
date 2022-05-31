@@ -9,7 +9,7 @@ repository = "https://github.com/cehteh/sharded_mutex.git"
 keywords = ["locking", "concurrency"]
 
 [dependencies]
-parking_lot = ">= 0.11, <=0.12"
+parking_lot = ">= 0.11, <=0.13"
 assoc_static = "1.0.0-pre0"
 
 [badges]
