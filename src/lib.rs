@@ -27,7 +27,7 @@ macro_rules! sharded_mutex {
             $T,
             $TAG,
             $crate::MutexPool,
-            $crate::MutexPool([$crate::parking_lot::lock_api::RawMutex::INIT; $crate::POOL_SIZE])
+            $crate::MutexPool([$crate::MUTEXRC_INIT; $crate::POOL_SIZE])
         );
     };
     ($T:ty) => {
@@ -35,7 +35,7 @@ macro_rules! sharded_mutex {
             $T,
             (),
             $crate::MutexPool,
-            $crate::MutexPool([$crate::parking_lot::lock_api::RawMutex::INIT; $crate::POOL_SIZE])
+            $crate::MutexPool([$crate::MUTEXRC_INIT; $crate::POOL_SIZE])
         );
     };
 }
@@ -49,26 +49,65 @@ where
 
 // SAFETY: Access to the UnsafeCell is protected by the mutex.
 unsafe impl<T, TAG> Sync for ShardedMutex<T, TAG> where T: Send + AssocStatic<MutexPool, TAG> {}
-
-// SAFETY: Access to the UnsafeCell is protected by the mutex.
 unsafe impl<T, TAG> Send for ShardedMutex<T, TAG> where T: Send + AssocStatic<MutexPool, TAG> {}
 
 /// Only exported for macro use
 #[doc(hidden)]
 pub const POOL_SIZE: usize = 127;
 
+/// Mutex with a reference count. This are not recursive mutexes!
+/// Only exported for macro use
+#[doc(hidden)]
+pub struct RawMutexRc(RawMutex, UnsafeCell<usize>);
+
+/// Only exported for macro use
+#[doc(hidden)]
+pub const MUTEXRC_INIT: RawMutexRc = RawMutexRc(RawMutex::INIT, UnsafeCell::new(0));
+
+// SAFETY: Access to the UnsafeCell is protected by the mutex.
+unsafe impl Sync for RawMutexRc {}
+unsafe impl Send for RawMutexRc {}
+
+impl RawMutexRc {
+    /// Lock the Mutex.
+    fn lock(&self) {
+        self.0.lock();
+    }
+
+    /// Tries to lock the Mutex.
+    fn try_lock(&self) -> bool {
+        self.0.try_lock()
+    }
+
+    /// Increments the reference count. The mutex must be locked already.
+    /// SAFETY: The mutex must be locked in the current context
+    unsafe fn again(&self) {
+        *self.1.get() += 1;
+    }
+
+    /// Decrements refcount when greater than zero, else unlocks the mutex.
+    /// SAFETY: The mutex must be locked in the current context
+    unsafe fn unlock(&self) {
+        if *self.1.get() == 0 {
+            self.0.unlock()
+        } else {
+            *self.1.get() -= 1;
+        }
+    }
+}
+
 /// A Pool of Mutexes, should be treated opaque and never constructed, only exported because
 /// the macro and AssocStatic signatures need it.
 #[repr(align(128))] // cache line aligned
-pub struct MutexPool(pub [RawMutex; POOL_SIZE]);
+pub struct MutexPool(pub [RawMutexRc; POOL_SIZE]);
 
 impl<T, TAG> ShardedMutex<T, TAG>
 where
     T: AssocStatic<MutexPool, TAG>,
 {
-    fn get_mutex(&self) -> &'static RawMutex {
+    fn get_mutex(&self) -> &'static RawMutexRc {
         &AssocStatic::<MutexPool, TAG>::from(
-            // SAFETY: only used for getting the type, never dereferenced
+            // SAFETY: only used to get the type, never dereferenced
             unsafe { &*self.0.get() },
         )
         .0[self as *const Self as usize % POOL_SIZE]
@@ -153,7 +192,7 @@ where
 {
     fn drop(&mut self) {
         unsafe {
-            // SAFETY: the guard gurantees that the we have the lock
+            // SAFETY: the guard guarantees that the we have the lock
             self.0.get_mutex().unlock();
         }
     }
