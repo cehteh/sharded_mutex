@@ -128,6 +128,38 @@ where
     pub fn try_lock(&self) -> Option<ShardedMutexGuard<T, TAG>> {
         self.get_mutex().try_lock().then(|| ShardedMutexGuard(self))
     }
+
+    /// Acquire a global sharded locks guard on multiple objects passed as array of references
+    /// Returns an array of ShardedMutexGuard reflecting the input arguments.
+    ///
+    /// SAFETY: The current thread must not hold any sharded locks of the same type as this will deadlock
+    pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N] {
+        // get a list of all required locks and sort them by address. This ensure consistent
+        // locking order and will never deadlock (as long the current thread doesn't already
+        // hold a lock)
+        let mut locks = objects.map(|o| o.get_mutex());
+        locks.sort_by(|a, b| {
+            (*a as *const RawMutexRc as usize).cmp(&(*b as *const RawMutexRc as usize))
+        });
+
+        // lock in order with consecutive same locks only incrementing the reference count
+        for i in 0..locks.len() {
+            // SAFETY: we iterate to .len()
+            unsafe {
+                if i == 0
+                    || *locks.get_unchecked(i - 1) as *const RawMutexRc
+                        != *locks.get_unchecked(i) as *const RawMutexRc
+                {
+                    locks.get_unchecked(i).lock();
+                } else {
+                    locks.get_unchecked(i).again();
+                }
+            }
+        }
+
+        // create mutex guards for each
+        objects.map(|o| ShardedMutexGuard(o))
+    }
 }
 
 /// The guard returned from locking a ShardedMutex. Dropping this will unlock the mutex.
@@ -235,5 +267,24 @@ mod tests {
         drop(guard);
 
         assert_eq!(*x.lock(), 234);
+    }
+
+    #[test]
+    fn multi_lock() {
+        let x = ShardedMutex::new(123);
+        let y = ShardedMutex::new(234);
+        let z = ShardedMutex::new(345);
+
+        let mut guards = ShardedMutex::multi_lock([&x, &z, &y]);
+
+        // ensure that one cant move a mutex guard out of the array .. doesnt work, make refcounts
+        assert_eq!(*guards[0], 123);
+        assert_eq!(*guards[1], 345);
+        assert_eq!(*guards[2], 234);
+
+        *guards[1] = 456;
+        drop(guards);
+
+        assert_eq!(*z.lock(), 456);
     }
 }
