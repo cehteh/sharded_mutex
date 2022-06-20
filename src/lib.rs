@@ -70,23 +70,27 @@ unsafe impl Send for RawMutexRc {}
 
 impl RawMutexRc {
     /// Lock the Mutex.
+    #[inline]
     fn lock(&self) {
         self.0.lock();
     }
 
     /// Tries to lock the Mutex.
+    #[inline]
     fn try_lock(&self) -> bool {
         self.0.try_lock()
     }
 
     /// Increments the reference count. The mutex must be locked already.
     /// SAFETY: The mutex must be locked in the current context
+    #[inline]
     unsafe fn again(&self) {
         *self.1.get() += 1;
     }
 
     /// Decrements refcount when greater than zero, else unlocks the mutex.
     /// SAFETY: The mutex must be locked in the current context
+    #[inline]
     unsafe fn unlock(&self) {
         if *self.1.get() == 0 {
             self.0.unlock()
