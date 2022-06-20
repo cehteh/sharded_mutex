@@ -130,7 +130,7 @@ where
     }
 
     /// Acquire a global sharded locks guard on multiple objects passed as array of references
-    /// Returns an array of ShardedMutexGuard reflecting the input arguments.
+    /// Returns an array [ShardedMutexGuard] reflecting the input arguments.
     ///
     /// SAFETY: The current thread must not hold any sharded locks of the same type as this will deadlock
     pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N] {
@@ -159,6 +159,47 @@ where
 
         // create mutex guards for each
         objects.map(|o| ShardedMutexGuard(o))
+    }
+
+    /// Try to acquire a global sharded locks guard on multiple objects passed as array of
+    /// references Returns an optional array Some([ShardedMutexGuard]) reflecting the input
+    /// arguments when the locks could be obtained and None when locking failed.
+    ///
+    /// SAFETY: The current thread must not hold any sharded locks of the same type as this will deadlock
+    pub fn try_multi_lock<const N: usize>(
+        objects: [&Self; N],
+    ) -> Option<[ShardedMutexGuard<T, TAG>; N]> {
+        // get a list of all required locks and sort them by address. This ensure consistent
+        // locking order and will never deadlock (as long the current thread doesn't already
+        // hold a lock)
+        let mut locks = objects.map(|o| o.get_mutex());
+        locks.sort_by(|a, b| {
+            (*a as *const RawMutexRc as usize).cmp(&(*b as *const RawMutexRc as usize))
+        });
+
+        // lock in order with consecutive same locks only incrementing the reference count
+        for i in 0..locks.len() {
+            // SAFETY: we iterate to .len()
+            unsafe {
+                if i == 0
+                    || *locks.get_unchecked(i - 1) as *const RawMutexRc
+                        != *locks.get_unchecked(i) as *const RawMutexRc
+                {
+                    if !locks.get_unchecked(i).try_lock() {
+                        // unlock all already obtained locks and bail out
+                        for j in 0..i {
+                            locks.get_unchecked(j).unlock();
+                        }
+                        return None;
+                    }
+                } else {
+                    locks.get_unchecked(i).again();
+                }
+            }
+        }
+
+        // create mutex guards for each
+        Some(objects.map(|o| ShardedMutexGuard(o)))
     }
 }
 
@@ -277,7 +318,6 @@ mod tests {
 
         let mut guards = ShardedMutex::multi_lock([&x, &z, &y]);
 
-        // ensure that one cant move a mutex guard out of the array .. doesnt work, make refcounts
         assert_eq!(*guards[0], 123);
         assert_eq!(*guards[1], 345);
         assert_eq!(*guards[2], 234);
@@ -286,5 +326,31 @@ mod tests {
         drop(guards);
 
         assert_eq!(*z.lock(), 456);
+
+        // again, different order
+        let guards = ShardedMutex::multi_lock([&z, &y, &x]);
+
+        assert_eq!(*guards[0], 456);
+        assert_eq!(*guards[1], 234);
+        assert_eq!(*guards[2], 123);
+    }
+
+    #[test]
+    fn try_multi_lock() {
+        let x = ShardedMutex::new(123);
+        let y = ShardedMutex::new(234);
+        let z = ShardedMutex::new(345);
+
+        let guards = ShardedMutex::multi_lock([&x, &z, &y]);
+        assert!(ShardedMutex::try_multi_lock([&x, &z, &y]).is_none());
+
+        drop(guards);
+
+        // now we can lock again
+        let guards = ShardedMutex::try_multi_lock([&z, &y, &x]);
+        assert!(guards.is_some());
+        assert_eq!(*guards.as_ref().unwrap()[0], 345);
+        assert_eq!(*guards.as_ref().unwrap()[1], 234);
+        assert_eq!(*guards.as_ref().unwrap()[2], 123);
     }
 }
