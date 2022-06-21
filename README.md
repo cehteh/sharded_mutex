@@ -12,6 +12,12 @@ There is one pool of mutexes per guarded type, thus it is possible to lock value
 types at the same time. Further a 'multi_lock' API allows to obtain locks on multiple objects
 of the same type at the same time.
 
+This pool of mutexes per types comes with a cost. In the current implementation each pool
+needs 256 bytes. Thus using ShardedMutex makes only sense for types when significantly more
+than 256 instances are to be expected.
+
+Same types may have different locking domains using type tags.
+
 **Example usage:**
 ```
 use sharded_mutex::ShardedMutex;

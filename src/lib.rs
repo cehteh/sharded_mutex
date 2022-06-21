@@ -53,13 +53,14 @@ unsafe impl<T, TAG> Sync for ShardedMutex<T, TAG> where T: Send + AssocStatic<Mu
 unsafe impl<T, TAG> Send for ShardedMutex<T, TAG> where T: Send + AssocStatic<MutexPool, TAG> {}
 
 /// Only exported for macro use
+// NOTE: must be less than 256, We use u8 as refcount below
 #[doc(hidden)]
 pub const POOL_SIZE: usize = 127;
 
 /// Mutex with a reference count. This are not recursive mutexes!
 /// Only exported for macro use
 #[doc(hidden)]
-pub struct RawMutexRc(RawMutex, UnsafeCell<usize>);
+pub struct RawMutexRc(RawMutex, UnsafeCell<u8>);
 
 /// Only exported for macro use
 #[doc(hidden)]
@@ -104,7 +105,7 @@ impl RawMutexRc {
 /// A Pool of Mutexes, should be treated opaque and never constructed, only exported because
 /// the macro and AssocStatic signatures need it.
 #[repr(align(128))] // cache line aligned
-pub struct MutexPool(pub [RawMutexRc; POOL_SIZE]);
+pub struct MutexPool(#[doc(hidden)] pub [RawMutexRc; POOL_SIZE]);
 
 impl<T, TAG> ShardedMutex<T, TAG>
 where
@@ -276,6 +277,8 @@ where
     }
 }
 
+// The integer types and bool are only here for completeness, it is better to use
+// atomic types instead sharded_mutex
 sharded_mutex!(bool);
 sharded_mutex!(i8);
 sharded_mutex!(u8);
