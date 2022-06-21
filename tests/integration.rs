@@ -43,3 +43,21 @@ fn own_type2() {
     let x = ShardedMutex::new(TestType(123));
     assert_eq!(x.lock().0, 123);
 }
+
+#[test]
+fn distinct_tags() {
+    #[derive(Debug, PartialEq)]
+    struct TestType(i32);
+
+    // Create a tagged versions each providing their own locking domains
+    struct MyTag1;
+    sharded_mutex!(TestType, MyTag1);
+    struct MyTag2;
+    sharded_mutex!(TestType, MyTag2);
+
+    // need an explicit tag
+    let x: ShardedMutex<_, MyTag1> = ShardedMutex::new(TestType(123));
+    assert_eq!(x.lock().0, 123);
+    let y: ShardedMutex<_, MyTag2> = ShardedMutex::new(TestType(234));
+    assert_eq!(y.lock().0, 234);
+}
