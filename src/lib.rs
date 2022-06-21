@@ -41,6 +41,7 @@ macro_rules! sharded_mutex {
 }
 
 /// Wraps a 'T' that can only be accessed through global mutexes at zero memory overhead per object.
+/// The optional 'TAG' is used to create locking domains which share locks.
 #[derive(Debug)]
 #[repr(transparent)]
 pub struct ShardedMutex<T, TAG = ()>(UnsafeCell<T>, PhantomData<TAG>)
@@ -123,6 +124,8 @@ where
     }
 
     /// Acquire a global sharded lock guard with unlock on drop semantics
+    ///
+    /// **SAFETY:** The current thread must not hold any sharded locks of the same type as this will deadlock
     pub fn lock(&self) -> ShardedMutexGuard<T, TAG> {
         self.get_mutex().lock();
         ShardedMutexGuard(self)
@@ -136,7 +139,7 @@ where
     /// Acquire a global sharded locks guard on multiple objects passed as array of references
     /// Returns an array [ShardedMutexGuard] reflecting the input arguments.
     ///
-    /// SAFETY: The current thread must not hold any sharded locks of the same type as this will deadlock
+    /// **SAFETY:** The current thread must not hold any sharded locks of the same type as this will deadlock
     pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N] {
         // get a list of all required locks and sort them by address. This ensure consistent
         // locking order and will never deadlock (as long the current thread doesn't already
@@ -168,8 +171,6 @@ where
     /// Try to acquire a global sharded locks guard on multiple objects passed as array of
     /// references Returns an optional array Some([ShardedMutexGuard]) reflecting the input
     /// arguments when the locks could be obtained and None when locking failed.
-    ///
-    /// SAFETY: The current thread must not hold any sharded locks of the same type as this will deadlock
     pub fn try_multi_lock<const N: usize>(
         objects: [&Self; N],
     ) -> Option<[ShardedMutexGuard<T, TAG>; N]> {
