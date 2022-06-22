@@ -1,6 +1,6 @@
 [package]
 name = "sharded_mutex"
-version = "0.8.0"
+version = "0.8.1"
 authors = ["Christian Thäter <ct@pipapo.org>"]
 edition = "2021"
 description = "Not so bad global locks"
