@@ -22,6 +22,21 @@ use parking_lot::RawMutex;
 /// newtype. The 'TAG' is required when you want to implement a sharded mutex over foreign
 /// types that are not implemented in your crate. This can be any (non-generic) type your
 /// crate defines, preferably you just make a zero-size struct just for this purpose.
+///
+/// **Example:**
+/// ```
+/// use sharded_mutex::*;
+///
+/// // user defined type
+/// struct MyType(String);
+///
+/// // provide sharded mutexes for it
+/// sharded_mutex!(MyType);
+///
+/// // use a tag create an independent locking domain
+/// struct SomeTag;
+/// sharded_mutex!(MyType, SomeTag);
+/// ```
 #[macro_export]
 macro_rules! sharded_mutex {
     ($T:ty, $TAG:ty) => {
