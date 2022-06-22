@@ -315,6 +315,8 @@ sharded_mutex!(u128);
 sharded_mutex!(isize);
 sharded_mutex!(usize);
 sharded_mutex!(char);
+sharded_mutex!(f32);
+sharded_mutex!(f64);
 sharded_mutex!(String);
 
 #[cfg(test)]
