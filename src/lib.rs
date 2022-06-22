@@ -7,12 +7,14 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+#[doc(hidden)]
 pub use assoc_static::*;
+#[doc(hidden)]
 pub use parking_lot;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::RawMutex;
 
-/// Every type that shall be used within a ShardedMutex needs to implement some boilerplate
+/// Every type that is used within a ShardedMutex needs to implement some boilerplate
 /// (assoc_static). For common non-generic standard types this is already done. For your own
 /// types you need to implement this by placing `sharded_mutex!(YourType)` into your source.
 /// When some std type is missing, please send me a note or a PR's. Types from external crates
@@ -84,13 +86,15 @@ impl RawMutexRc {
     }
 
     /// Increments the reference count. The mutex must be locked already.
+    ///
     /// SAFETY: The mutex must be locked in the current context
     #[inline]
     unsafe fn again(&self) {
         *self.1.get() += 1;
     }
 
-    /// Decrements refcount when greater than zero, else unlocks the mutex.
+    /// Decrements refcount when it is greater than zero else unlocks the mutex.
+    ///
     /// SAFETY: The mutex must be locked in the current context
     #[inline]
     unsafe fn unlock(&self) {
@@ -102,10 +106,11 @@ impl RawMutexRc {
     }
 }
 
+#[doc(hidden)]
 /// A Pool of Mutexes, should be treated opaque and never constructed, only exported because
 /// the macro and AssocStatic signatures need it.
 #[repr(align(128))] // cache line aligned
-pub struct MutexPool(#[doc(hidden)] pub [RawMutexRc; POOL_SIZE]);
+pub struct MutexPool(pub [RawMutexRc; POOL_SIZE]);
 
 impl<T, TAG> ShardedMutex<T, TAG>
 where

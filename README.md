@@ -5,8 +5,8 @@ per object. Concurrency is improved by selecting a Mutex from a pool based on th
 the object to be locked.
 
 Even being sharded, these Mutexes act still as global and non-recursive locks. One must not
-try to lock another object while a lock is already hold, otherwise deadlocks are around the
-corner.
+lock another object while a lock on the same type/domain is already hold, otherwise deadlocks
+will happen.
 
 There is one pool of mutexes per guarded type, thus it is possible to lock values of different
 types at the same time. Further a 'multi_lock' API allows to obtain locks on multiple objects
