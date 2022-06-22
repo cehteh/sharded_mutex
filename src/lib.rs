@@ -146,13 +146,14 @@ where
 
     /// Acquire a global sharded lock guard with unlock on drop semantics
     ///
-    /// **SAFETY:** The current thread must not hold any sharded locks of the same type as this will deadlock
+    /// **SAFETY:** The current thread must not hold any sharded locks of the same type/domain
+    /// as this will deadlock
     pub fn lock(&self) -> ShardedMutexGuard<T, TAG> {
         self.get_mutex().lock();
         ShardedMutexGuard(self)
     }
 
-    /// Acquire a global sharded lock guard with unlock on drop semantics
+    /// Tries to acquire a global sharded lock guard with unlock on drop semantics
     pub fn try_lock(&self) -> Option<ShardedMutexGuard<T, TAG>> {
         self.get_mutex().try_lock().then(|| ShardedMutexGuard(self))
     }
@@ -160,7 +161,8 @@ where
     /// Acquire a global sharded locks guard on multiple objects passed as array of references
     /// Returns an array [ShardedMutexGuard] reflecting the input arguments.
     ///
-    /// **SAFETY:** The current thread must not hold any sharded locks of the same type as this will deadlock
+    /// **SAFETY:** The current thread must not hold any sharded locks of the same type/domain
+    /// as this will deadlock
     pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N] {
         // get a list of all required locks and sort them by address. This ensure consistent
         // locking order and will never deadlock (as long the current thread doesn't already
