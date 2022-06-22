@@ -158,8 +158,8 @@ where
         self.get_mutex().try_lock().then(|| ShardedMutexGuard(self))
     }
 
-    /// Acquire a global sharded locks guard on multiple objects passed as array of references
-    /// Returns an array [ShardedMutexGuard] reflecting the input arguments.
+    /// Acquire a global sharded locks guard on multiple objects passed as array of references.
+    /// Returns an array `[ShardedMutexGuard; N]` reflecting the input arguments.
     ///
     /// **SAFETY:** The current thread must not hold any sharded locks of the same type/domain
     /// as this will deadlock
@@ -192,8 +192,8 @@ where
     }
 
     /// Try to acquire a global sharded locks guard on multiple objects passed as array of
-    /// references Returns an optional array Some([ShardedMutexGuard]) reflecting the input
-    /// arguments when the locks could be obtained and None when locking failed.
+    /// references. Returns an optional array `Some([ShardedMutexGuard; N])` reflecting the input
+    /// arguments when the locks could be obtained and `None` when locking failed.
     pub fn try_multi_lock<const N: usize>(
         objects: [&Self; N],
     ) -> Option<[ShardedMutexGuard<T, TAG>; N]> {
