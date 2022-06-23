@@ -133,11 +133,12 @@ where
     T: AssocStatic<MutexPool, TAG>,
 {
     fn get_mutex(&self) -> &'static RawMutexRc {
-        &AssocStatic::<MutexPool, TAG>::from(
-            // SAFETY: only used to get the type, never dereferenced
-            unsafe { &*self.0.get() },
-        )
-        .0[self as *const Self as usize % POOL_SIZE]
+        unsafe {
+            // SAFETY: modulo constrains the length
+            <T as AssocStatic<MutexPool, TAG>>::get_static()
+                .0
+                .get_unchecked(self as *const Self as usize % POOL_SIZE)
+        }
     }
 
     /// Create a new ShardedMutex from the given value.
