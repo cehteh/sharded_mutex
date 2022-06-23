@@ -1,4 +1,4 @@
-# ShardedMutex, aka 'not so bad global lock'
+# ShardedMutex, atomic Everything
 
 This library provides global locks for (pseudo-) atomic access to data without memory overhead
 per object. Concurrency is improved by selecting a Mutex from a pool based on the Address of
@@ -17,6 +17,8 @@ needs 256 bytes. Thus using ShardedMutex makes only sense for types when signifi
 than 256 instances are to be expected.
 
 Same types may have different locking domains using type tags.
+
+Provides pseudo atomic access for types that implement `Copy` and `PartialEq`.
 
 **Example usage:**
 ```
@@ -43,4 +45,19 @@ drop(guards);
 
 // lock again
 assert_eq!(*y.lock(), 456);
+
+// Pseudo atomic access
+use sharded_mutex::PseudoAtomicOps;
+
+x.store(&234);
+assert_eq!(x.load(), 234);
+
+let mut swapping = 345;
+x.swap(&mut swapping);
+assert_eq!(swapping, 234);
+assert_eq!(x.load(), 345);
+
+assert!(!x.compare_and_set(&123, &456));
+assert!(x.compare_and_set(&345, &456));
+assert_eq!(x.load(), 456);
 ```

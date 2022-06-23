@@ -81,6 +81,7 @@ pub struct RawMutexRc(RawMutex, UnsafeCell<u8>);
 
 /// Only exported for macro use
 #[doc(hidden)]
+#[allow(clippy::declare_interior_mutable_const)] // This is exactly needed here
 pub const MUTEXRC_INIT: RawMutexRc = RawMutexRc(RawMutex::INIT, UnsafeCell::new(0));
 
 // SAFETY: Access to the UnsafeCell is protected by the mutex.
@@ -228,6 +229,49 @@ where
 
         // create mutex guards for each
         Some(objects.map(|o| ShardedMutexGuard(o)))
+    }
+}
+
+/// Include this trait to get atomics like access for types that implement Copy and PartialEq
+pub trait PseudoAtomicOps<T, TAG> {
+    /// Returns a copy of the value stored in `self`.
+    fn load(&self) -> T;
+
+    /// Stores `value` in `self`.
+    fn store(&self, value: &T);
+
+    /// Swaps the contents of `self` and `value`.
+    fn swap(&self, value: &mut T);
+
+    /// Compares the value stored in `self` with `current`, when these are equal sets `self`
+    /// to `new` and returns `true`, otherwise `false``is returned.
+    fn compare_and_set(&self, current: &T, new: &T) -> bool;
+}
+
+impl<T, TAG> PseudoAtomicOps<T, TAG> for ShardedMutex<T, TAG>
+where
+    T: AssocStatic<MutexPool, TAG> + Copy + std::cmp::PartialEq,
+{
+    fn load(&self) -> T {
+        *self.lock()
+    }
+
+    fn store(&self, value: &T) {
+        *self.lock() = *value
+    }
+
+    fn swap(&self, value: &mut T) {
+        std::mem::swap(&mut *self.lock(), value)
+    }
+
+    fn compare_and_set(&self, current: &T, new: &T) -> bool {
+        let mut guard = self.lock();
+        if *guard == *current {
+            *guard = *new;
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -384,5 +428,26 @@ mod tests {
         assert_eq!(*guards.as_ref().unwrap()[0], 345);
         assert_eq!(*guards.as_ref().unwrap()[1], 234);
         assert_eq!(*guards.as_ref().unwrap()[2], 123);
+    }
+
+    #[test]
+    fn pseudo_atomic_ops() {
+        use crate::PseudoAtomicOps;
+        let x = ShardedMutex::new(123);
+
+        let loaded = x.load();
+        assert_eq!(loaded, 123);
+
+        x.store(&234);
+        assert_eq!(x.load(), 234);
+
+        let mut swapping = 345;
+        x.swap(&mut swapping);
+        assert_eq!(swapping, 234);
+        assert_eq!(x.load(), 345);
+
+        assert!(!x.compare_and_set(&123, &456));
+        assert!(x.compare_and_set(&345, &456));
+        assert_eq!(x.load(), 456);
     }
 }
