@@ -162,10 +162,14 @@ where
 
     /// Acquire a global sharded locks guard on multiple objects passed as array of references.
     /// Returns an array `[ShardedMutexGuard; N]` reflecting the input arguments.
+    /// The array of references should be reasonably small and must be smaller than 257.
     ///
     /// **SAFETY:** The current thread must not hold any sharded locks of the same type/domain
     /// as this will deadlock
     pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N] {
+        // TODO: compiletime check
+        assert!(N <= u8::MAX as usize);
+
         // get a list of all required locks and sort them by address. This ensure consistent
         // locking order and will never deadlock (as long the current thread doesn't already
         // hold a lock)
@@ -196,9 +200,13 @@ where
     /// Try to acquire a global sharded locks guard on multiple objects passed as array of
     /// references. Returns an optional array `Some([ShardedMutexGuard; N])` reflecting the input
     /// arguments when the locks could be obtained and `None` when locking failed.
+    /// The array of references should be reasonably small and must be smaller than 257.
     pub fn try_multi_lock<const N: usize>(
         objects: [&Self; N],
     ) -> Option<[ShardedMutexGuard<T, TAG>; N]> {
+        // TODO: compiletime check
+        assert!(N <= u8::MAX as usize);
+
         // get a list of all required locks and sort them by address. This ensure consistent
         // locking order and will never deadlock (as long the current thread doesn't already
         // hold a lock)
