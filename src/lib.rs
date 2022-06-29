@@ -41,18 +41,14 @@ use parking_lot::RawMutex;
 macro_rules! sharded_mutex {
     ($T:ty, $TAG:ty) => {
         $crate::assoc_static!(
-            $T,
-            $TAG,
-            $crate::MutexPool,
-            $crate::MutexPool([$crate::MUTEXRC_INIT; $crate::POOL_SIZE])
+            $TAG: $T,
+            $crate::MutexPool = $crate::MutexPool([$crate::MUTEXRC_INIT; $crate::POOL_SIZE])
         );
     };
     ($T:ty) => {
         $crate::assoc_static!(
             $T,
-            (),
-            $crate::MutexPool,
-            $crate::MutexPool([$crate::MUTEXRC_INIT; $crate::POOL_SIZE])
+            $crate::MutexPool = $crate::MutexPool([$crate::MUTEXRC_INIT; $crate::POOL_SIZE])
         );
     };
 }
