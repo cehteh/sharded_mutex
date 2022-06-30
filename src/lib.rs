@@ -9,6 +9,9 @@ use std::ops::DerefMut;
 
 #[doc(hidden)]
 pub use assoc_static::*;
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+pub use assoc_threadlocal::*;
 #[doc(hidden)]
 pub use parking_lot;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
@@ -38,6 +41,27 @@ use parking_lot::RawMutex;
 /// sharded_mutex!(MyType, SomeTag);
 /// ```
 #[macro_export]
+#[cfg(debug_assertions)]
+macro_rules! sharded_mutex {
+    ($T:ty, $TAG:ty) => {
+        $crate::assoc_static!(
+            $TAG: $T,
+            $crate::MutexPool = $crate::MutexPool([$crate::MUTEXRC_INIT; $crate::POOL_SIZE])
+        );
+        $crate::assoc_threadlocal!($TAG: $T, LockCount = LockCount(0));
+    };
+    ($T:ty) => {
+        $crate::assoc_static!(
+            $T,
+            $crate::MutexPool = $crate::MutexPool([$crate::MUTEXRC_INIT; $crate::POOL_SIZE])
+        );
+        $crate::assoc_threadlocal!($T, LockCount = LockCount(0));
+    };
+}
+
+#[allow(missing_docs)]
+#[macro_export]
+#[cfg(not(debug_assertions))]
 macro_rules! sharded_mutex {
     ($T:ty, $TAG:ty) => {
         $crate::assoc_static!(
@@ -64,6 +88,36 @@ where
 // SAFETY: Access to the UnsafeCell is protected by the mutex.
 unsafe impl<T, TAG> Sync for ShardedMutex<T, TAG> where T: Send + AssocStatic<MutexPool, TAG> {}
 unsafe impl<T, TAG> Send for ShardedMutex<T, TAG> where T: Send + AssocStatic<MutexPool, TAG> {}
+
+/// Used by the deadlock detector in debug builds. For each alive ShardedMutexGuard of a
+/// type/domain a thread local counter is incremented and decremented when the guards are
+/// destructed. Trying to lock the same type/domain again while this counter is not zero will
+/// panic.
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct LockCount(pub usize);
+
+/// The traits for the associated objects. In release builds only a MutexPool is associated,
+/// for debug builds this includes a LockCount as well.
+#[doc(hidden)]
+#[cfg(debug_assertions)]
+pub trait AssocObjects<TAG>:
+    AssocStatic<MutexPool, TAG> + AssocThreadLocal<LockCount, TAG>
+{
+}
+
+#[cfg(debug_assertions)]
+impl<T, TAG> AssocObjects<TAG> for T where
+    T: AssocStatic<MutexPool, TAG> + AssocThreadLocal<LockCount, TAG>
+{
+}
+
+#[doc(hidden)]
+#[cfg(not(debug_assertions))]
+pub trait AssocObjects<TAG>: AssocStatic<MutexPool, TAG> {}
+#[cfg(not(debug_assertions))]
+impl<T, TAG> AssocObjects<TAG> for T where T: AssocStatic<MutexPool, TAG> {}
 
 /// Only exported for macro use
 // NOTE: must be less than 256, We use u8 as refcount below
@@ -126,7 +180,7 @@ pub struct MutexPool(pub [RawMutexRc; POOL_SIZE]);
 
 impl<T, TAG> ShardedMutex<T, TAG>
 where
-    T: AssocStatic<MutexPool, TAG>,
+    T: AssocObjects<TAG>,
 {
     fn get_mutex(&self) -> &'static RawMutexRc {
         unsafe {
@@ -142,18 +196,30 @@ where
         ShardedMutex(UnsafeCell::new(value), PhantomData)
     }
 
+    #[cfg(debug_assertions)]
+    fn deadlock_check_before_locking() {
+        assert_eq!(
+            <T as AssocThreadLocal<LockCount, TAG>>::get_threadlocal(),
+            LockCount(0),
+            "already locked from the same thread"
+        );
+    }
+
     /// Acquire a global sharded lock guard with unlock on drop semantics
     ///
     /// **SAFETY:** The current thread must not hold any sharded locks of the same type/domain
     /// as this will deadlock
     pub fn lock(&self) -> ShardedMutexGuard<T, TAG> {
+        #[cfg(debug_assertions)]
+        Self::deadlock_check_before_locking();
+
         self.get_mutex().lock();
-        ShardedMutexGuard(self)
+        ShardedMutexGuard::new(self)
     }
 
     /// Tries to acquire a global sharded lock guard with unlock on drop semantics
     pub fn try_lock(&self) -> Option<ShardedMutexGuard<T, TAG>> {
-        self.get_mutex().try_lock().then(|| ShardedMutexGuard(self))
+        self.get_mutex().try_lock().then(|| ShardedMutexGuard::new(self))
     }
 
     /// Acquire a global sharded locks guard on multiple objects passed as array of references.
@@ -165,6 +231,9 @@ where
     pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N] {
         // TODO: compiletime check
         assert!(N <= u8::MAX as usize);
+
+        #[cfg(debug_assertions)]
+        Self::deadlock_check_before_locking();
 
         // get a list of all required locks and sort them by address. This ensure consistent
         // locking order and will never deadlock (as long the current thread doesn't already
@@ -190,7 +259,7 @@ where
         }
 
         // create mutex guards for each
-        objects.map(|o| ShardedMutexGuard(o))
+        objects.map(|o| ShardedMutexGuard::new(o))
     }
 
     /// Try to acquire a global sharded locks guard on multiple objects passed as array of
@@ -233,7 +302,7 @@ where
         }
 
         // create mutex guards for each
-        Some(objects.map(|o| ShardedMutexGuard(o)))
+        Some(objects.map(|o| ShardedMutexGuard::new(o)))
     }
 }
 
@@ -255,7 +324,7 @@ pub trait PseudoAtomicOps<T, TAG> {
 
 impl<T, TAG> PseudoAtomicOps<T, TAG> for ShardedMutex<T, TAG>
 where
-    T: AssocStatic<MutexPool, TAG> + Copy + std::cmp::PartialEq,
+    T: AssocObjects<TAG> + Copy + std::cmp::PartialEq,
 {
     fn load(&self) -> T {
         *self.lock()
@@ -284,11 +353,36 @@ where
 /// Access to the underlying value is done by dereferencing this guard.
 pub struct ShardedMutexGuard<'a, T, TAG>(&'a ShardedMutex<T, TAG>)
 where
-    T: AssocStatic<MutexPool, TAG>;
+    T: AssocObjects<TAG>;
+
+impl<'a, T, TAG> ShardedMutexGuard<'a, T, TAG>
+where
+    T: AssocObjects<TAG>,
+{
+    fn new(mutex: &'a ShardedMutex<T, TAG>) -> ShardedMutexGuard<'a, T, TAG> {
+        #[cfg(debug_assertions)]
+        Self::deadlock_increment_lock_count();
+
+        ShardedMutexGuard(mutex)
+    }
+
+    #[cfg(debug_assertions)]
+    fn deadlock_increment_lock_count() {
+        let LockCount(n) = <T as AssocThreadLocal<LockCount, TAG>>::get_threadlocal();
+        <T as AssocThreadLocal<LockCount, TAG>>::set_threadlocal(LockCount(n+1));
+    }
+
+    #[cfg(debug_assertions)]
+    fn deadlock_decrement_lock_count() {
+        let LockCount(n) = <T as AssocThreadLocal<LockCount, TAG>>::get_threadlocal();
+        <T as AssocThreadLocal<LockCount, TAG>>::set_threadlocal(LockCount(n-1));
+    }
+}
+
 
 impl<T, TAG> Deref for ShardedMutexGuard<'_, T, TAG>
 where
-    T: AssocStatic<MutexPool, TAG>,
+    T: AssocObjects<TAG>,
 {
     type Target = T;
 
@@ -302,7 +396,7 @@ where
 
 impl<T, TAG> DerefMut for ShardedMutexGuard<'_, T, TAG>
 where
-    T: AssocStatic<MutexPool, TAG>,
+    T: AssocObjects<TAG>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
@@ -314,7 +408,7 @@ where
 
 impl<T, TAG> AsRef<T> for ShardedMutexGuard<'_, T, TAG>
 where
-    T: AssocStatic<MutexPool, TAG>,
+    T: AssocObjects<TAG>,
 {
     fn as_ref(&self) -> &T {
         unsafe {
@@ -326,7 +420,7 @@ where
 
 impl<T, TAG> AsMut<T> for ShardedMutexGuard<'_, T, TAG>
 where
-    T: AssocStatic<MutexPool, TAG>,
+    T: AssocObjects<TAG>,
 {
     fn as_mut(&mut self) -> &mut T {
         unsafe {
@@ -338,9 +432,12 @@ where
 
 impl<T, TAG> Drop for ShardedMutexGuard<'_, T, TAG>
 where
-    T: AssocStatic<MutexPool, TAG>,
+    T: AssocObjects<TAG>,
 {
     fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        Self::deadlock_decrement_lock_count();
+
         unsafe {
             // SAFETY: the guard guarantees that the we have the lock
             self.0.get_mutex().unlock();
@@ -392,6 +489,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic]
+    fn simple_deadlock() {
+        let x = ShardedMutex::new(123);
+        let _guard = x.lock();
+        let _guard_deadlock = x.lock();
+    }
+
+    #[test]
     fn multi_lock() {
         let x = ShardedMutex::new(123);
         let y = ShardedMutex::new(234);
@@ -414,6 +520,17 @@ mod tests {
         assert_eq!(*guards[0], 456);
         assert_eq!(*guards[1], 234);
         assert_eq!(*guards[2], 123);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic]
+    fn multi_deadlock() {
+        let x = ShardedMutex::new(123);
+        let y = ShardedMutex::new(234);
+        let z = ShardedMutex::new(345);
+        let _guards = ShardedMutex::multi_lock([&x, &z, &y]);
+        let _guards_deadlock = ShardedMutex::multi_lock([&x, &z, &y]);
     }
 
     #[test]

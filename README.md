@@ -20,6 +20,9 @@ Same types may have different locking domains using type tags.
 
 Provides pseudo atomic access for types that implement `Copy` and `PartialEq`.
 
+In debug builds a deadlock detector is active which will panic when one tries to lock objects
+from the same type/domain while already holding a lock.
+
 **Example usage:**
 ```
 use sharded_mutex::ShardedMutex;
