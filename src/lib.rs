@@ -306,6 +306,18 @@ where
         // create mutex guards for each
         Some(objects.map(|o| ShardedMutexGuard::new(o)))
     }
+
+    /// Returns a mutable reference to the contained value. Having self being a &mut ensures
+    /// that we are the only user of the mutex, thus the reference can be obtained without
+    /// locking.
+    pub fn get_mut(&mut self) -> &mut T {
+        &mut *self.0.get_mut()
+    }
+
+    /// Consumes the mutex and returns the inner data.
+    pub fn into_inner(self) -> T {
+        self.0.into_inner()
+    }
 }
 
 /// Include this trait to get atomics like access for types that implement Copy and PartialEq
@@ -572,5 +584,19 @@ mod tests {
         assert!(!x.compare_and_set(&123, &456));
         assert!(x.compare_and_set(&345, &456));
         assert_eq!(x.load(), 456);
+    }
+
+    #[test]
+    fn get_mut() {
+        let mut x = ShardedMutex::new(123);
+        *x.get_mut() = 234;
+        assert_eq!(*x.get_mut(), 234);
+    }
+
+    #[test]
+    fn into_inner() {
+        let x = ShardedMutex::new(123);
+        let v = x.into_inner();
+        assert_eq!(v, 123);
     }
 }
