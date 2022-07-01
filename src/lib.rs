@@ -219,7 +219,9 @@ where
 
     /// Tries to acquire a global sharded lock guard with unlock on drop semantics
     pub fn try_lock(&self) -> Option<ShardedMutexGuard<T, TAG>> {
-        self.get_mutex().try_lock().then(|| ShardedMutexGuard::new(self))
+        self.get_mutex()
+            .try_lock()
+            .then(|| ShardedMutexGuard::new(self))
     }
 
     /// Acquire a global sharded locks guard on multiple objects passed as array of references.
@@ -369,16 +371,15 @@ where
     #[cfg(debug_assertions)]
     fn deadlock_increment_lock_count() {
         let LockCount(n) = <T as AssocThreadLocal<LockCount, TAG>>::get_threadlocal();
-        <T as AssocThreadLocal<LockCount, TAG>>::set_threadlocal(LockCount(n+1));
+        <T as AssocThreadLocal<LockCount, TAG>>::set_threadlocal(LockCount(n + 1));
     }
 
     #[cfg(debug_assertions)]
     fn deadlock_decrement_lock_count() {
         let LockCount(n) = <T as AssocThreadLocal<LockCount, TAG>>::get_threadlocal();
-        <T as AssocThreadLocal<LockCount, TAG>>::set_threadlocal(LockCount(n-1));
+        <T as AssocThreadLocal<LockCount, TAG>>::set_threadlocal(LockCount(n - 1));
     }
 }
-
 
 impl<T, TAG> Deref for ShardedMutexGuard<'_, T, TAG>
 where
@@ -389,7 +390,7 @@ where
     fn deref(&self) -> &Self::Target {
         unsafe {
             // SAFETY: the guard gurantees that the we own the object
-            &*self.0 .0.get()
+            &*self.0.0.get()
         }
     }
 }
@@ -401,7 +402,7 @@ where
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
             // SAFETY: the guard gurantees that the we own the object
-            &mut *self.0 .0.get()
+            &mut *self.0.0.get()
         }
     }
 }
@@ -413,7 +414,7 @@ where
     fn as_ref(&self) -> &T {
         unsafe {
             // SAFETY: the guard gurantees that the we own the object
-            &*self.0 .0.get()
+            &*self.0.0.get()
         }
     }
 }
@@ -425,7 +426,7 @@ where
     fn as_mut(&mut self) -> &mut T {
         unsafe {
             // SAFETY: the guard gurantees that the we own the object
-            &mut *self.0 .0.get()
+            &mut *self.0.0.get()
         }
     }
 }
