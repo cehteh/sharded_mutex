@@ -16,7 +16,7 @@ fn simple_i32() {
 #[test]
 fn std_types_needs_tag() {
     struct TestTag;
-    sharded_mutex!(Option<bool>, TestTag);
+    sharded_mutex!(TestTag: Option<bool>);
 
     let x = ShardedMutex::new(Some(true));
     assert_eq!(*x.lock(), Some(true));
@@ -51,9 +51,9 @@ fn distinct_tags() {
 
     // Create a tagged versions each providing their own locking domains
     struct MyTag1;
-    sharded_mutex!(TestType, MyTag1);
+    sharded_mutex!(MyTag1: TestType);
     struct MyTag2;
-    sharded_mutex!(TestType, MyTag2);
+    sharded_mutex!(MyTag2: TestType);
 
     // need an explicit tag
     let x: ShardedMutex<_, MyTag1> = ShardedMutex::new(TestType(123));

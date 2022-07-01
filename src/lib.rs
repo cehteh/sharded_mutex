@@ -38,12 +38,12 @@ use parking_lot::RawMutex;
 ///
 /// // use a tag create an independent locking domain
 /// struct SomeTag;
-/// sharded_mutex!(MyType, SomeTag);
+/// sharded_mutex!(SomeTag:MyType);
 /// ```
 #[macro_export]
 #[cfg(debug_assertions)]
 macro_rules! sharded_mutex {
-    ($T:ty, $TAG:ty) => {
+    ($TAG:ty : $T:ty) => {
         $crate::assoc_static!(
             $TAG: $T,
             $crate::MutexPool = $crate::MutexPool([$crate::MUTEXRC_INIT; $crate::POOL_SIZE])
@@ -63,7 +63,7 @@ macro_rules! sharded_mutex {
 #[macro_export]
 #[cfg(not(debug_assertions))]
 macro_rules! sharded_mutex {
-    ($T:ty, $TAG:ty) => {
+    ($TAG:ty : $T:ty) => {
         $crate::assoc_static!(
             $TAG: $T,
             $crate::MutexPool = $crate::MutexPool([$crate::MUTEXRC_INIT; $crate::POOL_SIZE])
