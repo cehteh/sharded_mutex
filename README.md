@@ -12,13 +12,10 @@ There is one pool of mutexes per guarded type, thus it is possible to lock value
 types at the same time. Further a 'multi_lock' API allows to obtain locks on multiple objects
 of the same type at the same time.
 
-This pool of mutexes per types comes with a cost. In the current implementation each pool
-needs 256 bytes. Thus using ShardedMutex makes only sense for types when significantly more
-than 256 instances are to be expected.
-
 Same types may have different locking domains using type tags.
 
-Provides pseudo atomic access for types that implement `Copy` and `PartialEq`.
+Provides pseudo atomic access for types that implement `Copy` and `PartialEq`. These can never
+deadlock because they are always leaf locks.
 
 In debug builds a deadlock detector is active which will panic when one tries to lock objects
 from the same type/domain while already holding a lock.
@@ -64,3 +61,31 @@ assert!(!x.compare_and_set(&123, &456));
 assert!(x.compare_and_set(&345, &456));
 assert_eq!(x.load(), 456);
 ```
+
+
+# Features
+
+ShardedMutex using arrays of 127 mutexes for locking objects. This would pack Mutexes for
+unrelated objects pretty close together which in turn impacts performance because of false
+cache sharing. To alleviate this problem the internal aligment of these mutexes can be
+increased. The cost for this is a larger memory footprint.
+
+## *align_none*
+
+Packs Mutexes as tight as possible. Good for embedded systems that have only little caches or
+none at all and memory is premium.
+
+## *align_narrow*
+
+This is the **default**, it places 8 Mutexes per cacheline which should be a good compromise
+between space and performance.
+
+## *align_wide*
+
+Places 4 mutexes per cacheline, should improve performance even further. Probably only
+necessary when its proven that there is cache contention.
+
+## *align_cacheline*
+
+Places one mutex per cacheline. This should give the best performance without any
+cache contention, on the cost of wasting memory.

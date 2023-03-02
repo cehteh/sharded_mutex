@@ -120,13 +120,18 @@ pub trait AssocObjects<TAG>: AssocStatic<MutexPool, TAG> {}
 impl<T, TAG> AssocObjects<TAG> for T where T: AssocStatic<MutexPool, TAG> {}
 
 /// Only exported for macro use
-// NOTE: must be less than 256, We use u8 as refcount below
+// NOTE: must be less than 256, We use u8 as refcount below, we use our favorite mersenne prime to spread
+// objects fairly uniformly on these mutexes.
 #[doc(hidden)]
 pub const POOL_SIZE: usize = 127;
 
 /// Mutex with a reference count. This are not recursive mutexes!
 /// Only exported for macro use
 #[doc(hidden)]
+#[cfg_attr(feature = "align_none", repr(align(1)))]
+#[cfg_attr(feature = "align_narrow", repr(align(8)))]
+#[cfg_attr(feature = "align_wide", repr(align(16)))]
+#[cfg_attr(feature = "align_cacheline", repr(align(64)))]
 pub struct RawMutexRc(RawMutex, UnsafeCell<u8>);
 
 /// Only exported for macro use
@@ -175,7 +180,7 @@ impl RawMutexRc {
 #[doc(hidden)]
 /// A Pool of Mutexes, should be treated opaque and never constructed, only exported because
 /// the macro and AssocStatic signatures need it.
-#[repr(align(128))] // cache line aligned
+#[repr(align(64))] // cache line aligned
 pub struct MutexPool(pub [RawMutexRc; POOL_SIZE]);
 
 impl<T, TAG> ShardedMutex<T, TAG>
