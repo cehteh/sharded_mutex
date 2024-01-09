@@ -245,8 +245,9 @@ where
     ///
     /// The array of references should be reasonably small and must be smaller than 257.
     pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N] {
-        // TODO: compiletime check
-        assert!(u8::try_from(N).is_ok());
+        if N > u8::MAX as usize {
+            unreachable!("N must be less than 257")
+        }
 
         #[cfg(debug_assertions)]
         Self::deadlock_check_before_locking();
@@ -288,8 +289,9 @@ where
     pub fn try_multi_lock<const N: usize>(
         objects: [&Self; N],
     ) -> Option<[ShardedMutexGuard<T, TAG>; N]> {
-        // TODO: compiletime check
-        assert!(u8::try_from(N).is_ok());
+        if N > u8::MAX as usize {
+            unreachable!("N must be less than 257")
+        }
 
         // get a list of all required locks and sort them by address. This ensure consistent
         // locking order and will never deadlock (as long the current thread doesn't already
@@ -581,6 +583,28 @@ mod tests {
         assert_eq!(*guards.as_ref().unwrap()[1], 234);
         assert_eq!(*guards.as_ref().unwrap()[2], 123);
     }
+
+    // must fail to compile
+    // #[test]
+    // fn try_multi_lock_range() {
+    //     let x = ShardedMutex::new(123);
+    //
+    //     let refs = [
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //         &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x, &x,
+    //     ];
+    //
+    //     let _guards = ShardedMutex::multi_lock(refs);
+    // }
 
     #[test]
     fn pseudo_atomic_ops() {
