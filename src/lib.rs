@@ -17,14 +17,15 @@ pub use parking_lot;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
 use parking_lot::RawMutex;
 
-/// Every type that is used within a ShardedMutex needs to implement some boilerplate
-/// (assoc_static). For common non-generic standard types this is already done. For your own
-/// types you need to implement this by placing `sharded_mutex!(YourType)` into your source.
-/// When some std type is missing, please send me a note or a PR's. Types from external crates
-/// which can't be implemented by 'sharded_mutex' or by yourself need to be wraped in a
-/// newtype. The 'TAG' is required when you want to implement a sharded mutex over foreign
-/// types that are not implemented in your crate. This can be any (non-generic) type your
-/// crate defines, preferably you just make a zero-size struct just for this purpose.
+/// Every type that is used within a `ShardedMutex` needs to implement some boilerplate
+/// (`assoc_static!(T:TAG, MutexPool)`). For common non-generic standard types this is already
+/// done. For your own types you need to implement this by placing `sharded_mutex!(YourType)`
+/// into your source.  When some std type is missing, please send me a note or a PR's. Types
+/// from external crates which can't be implemented by sharded mutex or by yourself need to
+/// be wraped in a newtype. The 'TAG' is required when you want to implement a sharded mutex
+/// over foreign types that are not implemented in your crate. This can be any (non-generic)
+/// type your crate defines, preferably you just make a zero-size struct just for this
+/// purpose.
 ///
 /// **Example:**
 /// ```
@@ -170,7 +171,7 @@ impl RawMutexRc {
     #[inline]
     unsafe fn unlock(&self) {
         if *self.1.get() == 0 {
-            self.0.unlock()
+            self.0.unlock();
         } else {
             *self.1.get() -= 1;
         }
@@ -196,12 +197,12 @@ where
         }
     }
 
-    /// Create a new ShardedMutex from the given value.
+    /// Create a new `ShardedMutex` from the given value.
     pub fn new(value: T) -> Self {
         ShardedMutex(UnsafeCell::new(value), PhantomData)
     }
 
-    /// Create a new ShardedMutex from the given value and tag.
+    /// Create a new `ShardedMutex` from the given value and tag.
     pub fn new_with_tag(value: T, _: TAG) -> Self {
         ShardedMutex(UnsafeCell::new(value), PhantomData)
     }
@@ -236,13 +237,16 @@ where
 
     /// Acquire a global sharded locks guard on multiple objects passed as array of references.
     /// Returns an array `[ShardedMutexGuard; N]` reflecting the input arguments.
-    /// The array of references should be reasonably small and must be smaller than 257.
     ///
-    /// **SAFETY:** The current thread must not hold any sharded locks of the same type/domain
-    /// as this will deadlock
+    /// The current thread must not hold any sharded locks of the same type/domain
+    /// as this will deadlock. In debug builds this is asserted.
+    ///
+    /// # Panics
+    ///
+    /// The array of references should be reasonably small and must be smaller than 257.
     pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N] {
         // TODO: compiletime check
-        assert!(N <= u8::MAX as usize);
+        assert!(u8::try_from(N).is_ok());
 
         #[cfg(debug_assertions)]
         Self::deadlock_check_before_locking();
@@ -250,7 +254,7 @@ where
         // get a list of all required locks and sort them by address. This ensure consistent
         // locking order and will never deadlock (as long the current thread doesn't already
         // hold a lock)
-        let mut locks = objects.map(|o| o.get_mutex());
+        let mut locks = objects.map(ShardedMutex::get_mutex);
         locks.sort_by(|a, b| {
             (*a as *const RawMutexRc as usize).cmp(&(*b as *const RawMutexRc as usize))
         });
@@ -277,17 +281,20 @@ where
     /// Try to acquire a global sharded locks guard on multiple objects passed as array of
     /// references. Returns an optional array `Some([ShardedMutexGuard; N])` reflecting the input
     /// arguments when the locks could be obtained and `None` when locking failed.
+    ///
+    /// # Panics
+    ///
     /// The array of references should be reasonably small and must be smaller than 257.
     pub fn try_multi_lock<const N: usize>(
         objects: [&Self; N],
     ) -> Option<[ShardedMutexGuard<T, TAG>; N]> {
         // TODO: compiletime check
-        assert!(N <= u8::MAX as usize);
+        assert!(u8::try_from(N).is_ok());
 
         // get a list of all required locks and sort them by address. This ensure consistent
         // locking order and will never deadlock (as long the current thread doesn't already
         // hold a lock)
-        let mut locks = objects.map(|o| o.get_mutex());
+        let mut locks = objects.map(ShardedMutex::get_mutex);
         locks.sort_by(|a, b| {
             (*a as *const RawMutexRc as usize).cmp(&(*b as *const RawMutexRc as usize))
         });
@@ -330,7 +337,7 @@ where
     }
 }
 
-/// Include this trait to get atomics like access for types that implement Copy and PartialEq
+/// Include this trait to get atomics like access for types that implement `Copy` and `PartialEq`
 pub trait PseudoAtomicOps<T, TAG> {
     /// Returns a copy of the value stored in `self`.
     fn load(&self) -> T;
@@ -342,7 +349,7 @@ pub trait PseudoAtomicOps<T, TAG> {
     fn swap(&self, value: &mut T);
 
     /// Compares the value stored in `self` with `current`, when these are equal sets `self`
-    /// to `new` and returns `true`, otherwise `false``is returned.
+    /// to `new` and returns `true`, otherwise `false` is returned.
     fn compare_and_set(&self, current: &T, new: &T) -> bool;
 }
 
@@ -355,11 +362,11 @@ where
     }
 
     fn store(&self, value: &T) {
-        *self.lock() = *value
+        *self.lock() = *value;
     }
 
     fn swap(&self, value: &mut T) {
-        std::mem::swap(&mut *self.lock(), value)
+        std::mem::swap(&mut *self.lock(), value);
     }
 
     fn compare_and_set(&self, current: &T, new: &T) -> bool {
@@ -373,7 +380,7 @@ where
     }
 }
 
-/// The guard returned from locking a ShardedMutex. Dropping this will unlock the mutex.
+/// The guard returned from locking a `ShardedMutex`. Dropping this will unlock the mutex.
 /// Access to the underlying value is done by dereferencing this guard.
 pub struct ShardedMutexGuard<'a, T, TAG>(&'a ShardedMutex<T, TAG>)
 where
@@ -411,7 +418,7 @@ where
 
     fn deref(&self) -> &Self::Target {
         unsafe {
-            // SAFETY: the guard gurantees that the we own the object
+            // SAFETY: the guard guarantees that the we own the object
             &*self.0.0.get()
         }
     }
@@ -513,7 +520,7 @@ mod tests {
 
     #[test]
     #[cfg(debug_assertions)]
-    #[should_panic]
+    #[should_panic(expected = "already locked from the same thread")]
     fn simple_deadlock() {
         let x = ShardedMutex::new(123);
         let _guard = x.lock();
@@ -547,7 +554,7 @@ mod tests {
 
     #[test]
     #[cfg(debug_assertions)]
-    #[should_panic]
+    #[should_panic(expected = "already locked from the same thread")]
     fn multi_deadlock() {
         let x = ShardedMutex::new(123);
         let y = ShardedMutex::new(234);

@@ -1,15 +1,18 @@
 [package]
 name = "sharded_mutex"
-version = "1.1.0"
+version = "1.2.0"
 authors = ["Christian Thäter <ct@pipapo.org>"]
 edition = "2021"
-description = "Atomic Everything"
+description = "No per-object memory overhead locks. Pseudo atomic ops for Copy/PartialEq types."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/cehteh/sharded_mutex.git"
 keywords = ["locking", "concurrency"]
+categories = ["concurrency", "rust-patterns"]
+readme = "README.md"
+rust-version = "1.56.1"
 
 [dependencies]
-parking_lot = ">= 0.11, <=0.13"
+parking_lot = "0.11"
 assoc_static = "1.0.0"
 assoc_threadlocal = "0.0.1"
 
@@ -22,6 +25,19 @@ align_narrow = []
 align_wide = []
 align_cacheline = []
 
-
 [badges]
 maintenance = { status = "actively-developed" }
+
+[lints.rust]
+missing_docs = "warn"
+
+[lints.clippy]
+pedantic = "warn"
+cargo_common_metadata = "warn"
+doc_markdown = "warn"
+missing_panics_doc = "warn"
+must_use_candidate = "warn"
+semicolon_if_nothing_returned = "warn"
+
+[lints.rustdoc]
+missing_crate_level_docs = "warn"
