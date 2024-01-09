@@ -201,6 +201,11 @@ where
         ShardedMutex(UnsafeCell::new(value), PhantomData)
     }
 
+    /// Create a new ShardedMutex from the given value and tag.
+    pub fn new_with_tag(value: T, _: TAG) -> Self {
+        ShardedMutex(UnsafeCell::new(value), PhantomData)
+    }
+
     #[cfg(debug_assertions)]
     fn deadlock_check_before_locking() {
         assert_eq!(
