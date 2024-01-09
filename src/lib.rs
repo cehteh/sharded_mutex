@@ -8,10 +8,10 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 
 #[doc(hidden)]
-pub use assoc_static::*;
+pub use assoc_static::{assoc_static, AssocStatic};
 #[cfg(debug_assertions)]
 #[doc(hidden)]
-pub use assoc_threadlocal::*;
+pub use assoc_threadlocal::{assoc_threadlocal, AssocThreadLocal};
 #[doc(hidden)]
 pub use parking_lot;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
