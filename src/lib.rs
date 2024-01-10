@@ -103,7 +103,7 @@ pub struct LockCount(pub usize);
 /// for debug builds this includes a LockCount as well.
 #[doc(hidden)]
 #[cfg(debug_assertions)]
-pub trait AssocObjects<TAG>:
+trait AssocObjects<TAG>:
     AssocStatic<MutexPool, TAG> + AssocThreadLocal<LockCount, TAG>
 {
 }
@@ -184,6 +184,7 @@ impl RawMutexRc {
 #[repr(align(64))] // cache line aligned
 pub struct MutexPool(pub [RawMutexRc; POOL_SIZE]);
 
+#[allow(private_bounds)]
 impl<T, TAG> ShardedMutex<T, TAG>
 where
     T: AssocObjects<TAG>,
@@ -242,6 +243,7 @@ where
     /// as this will deadlock. In debug builds this is asserted.
     ///
     /// The array of references should be reasonably small and must be smaller than 257.
+    #[allow(private_bounds)]
     pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N]
     where
         usize: LessOrEqual256<N>,
@@ -281,6 +283,7 @@ where
     /// arguments when the locks could be obtained and `None` when locking failed.
     ///
     /// The array of references should be reasonably small and must be smaller than 257.
+    #[allow(private_bounds)]
     pub fn try_multi_lock<const N: usize>(
         objects: [&Self; N],
     ) -> Option<[ShardedMutexGuard<T, TAG>; N]>
@@ -378,10 +381,12 @@ where
 
 /// The guard returned from locking a `ShardedMutex`. Dropping this will unlock the mutex.
 /// Access to the underlying value is done by dereferencing this guard.
+#[allow(private_bounds)]
 pub struct ShardedMutexGuard<'a, T, TAG>(&'a ShardedMutex<T, TAG>)
 where
     T: AssocObjects<TAG>;
 
+#[allow(private_bounds)]
 impl<'a, T, TAG> ShardedMutexGuard<'a, T, TAG>
 where
     T: AssocObjects<TAG>,
@@ -471,8 +476,9 @@ where
     }
 }
 
-#[doc(hidden)]
-pub trait LessOrEqual256<const N: usize> {}
+// A ugly workaround to compile-time check const generic bounds. Will eventually be replaced
+// with something better when such is available in stable rust.
+trait LessOrEqual256<const N: usize> {}
 macro_rules! impl_less_or_equal_256 {
     ($($n:literal),*) => {
         $(
