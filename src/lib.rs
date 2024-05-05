@@ -189,6 +189,7 @@ impl<T, TAG> ShardedMutex<T, TAG>
 where
     T: AssocObjects<TAG>,
 {
+    #[inline]
     fn get_mutex(&self) -> &'static RawMutexRc {
         unsafe {
             // SAFETY: modulo constrains the length
@@ -221,6 +222,7 @@ where
     ///
     /// **SAFETY:** The current thread must not hold any sharded locks of the same type/domain
     /// as this will deadlock
+    #[cfg_attr(not(debug_assertions), inline)]
     pub fn lock(&self) -> ShardedMutexGuard<T, TAG> {
         #[cfg(debug_assertions)]
         Self::deadlock_check_before_locking();
@@ -230,6 +232,7 @@ where
     }
 
     /// Tries to acquire a global sharded lock guard with unlock on drop semantics
+    #[inline]
     pub fn try_lock(&self) -> Option<ShardedMutexGuard<T, TAG>> {
         self.get_mutex()
             .try_lock()
@@ -326,11 +329,13 @@ where
     /// Returns a mutable reference to the contained value. Having self being a &mut ensures
     /// that we are the only user of the mutex, thus the reference can be obtained without
     /// locking.
+    #[inline]
     pub fn get_mut(&mut self) -> &mut T {
         &mut *self.0.get_mut()
     }
 
     /// Consumes the mutex and returns the inner data.
+    #[inline]
     pub fn into_inner(self) -> T {
         self.0.into_inner()
     }
@@ -356,14 +361,17 @@ impl<T, TAG> PseudoAtomicOps<T, TAG> for ShardedMutex<T, TAG>
 where
     T: AssocObjects<TAG> + Copy + std::cmp::PartialEq,
 {
+    #[inline]
     fn load(&self) -> T {
         *self.lock()
     }
 
+    #[inline]
     fn store(&self, value: &T) {
         *self.lock() = *value;
     }
 
+    #[inline]
     fn swap(&self, value: &mut T) {
         std::mem::swap(&mut *self.lock(), value);
     }
@@ -391,6 +399,7 @@ impl<'a, T, TAG> ShardedMutexGuard<'a, T, TAG>
 where
     T: AssocObjects<TAG>,
 {
+    #[cfg_attr(not(debug_assertions), inline)]
     fn new(mutex: &'a ShardedMutex<T, TAG>) -> ShardedMutexGuard<'a, T, TAG> {
         #[cfg(debug_assertions)]
         Self::deadlock_increment_lock_count();
@@ -417,6 +426,7 @@ where
 {
     type Target = T;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         unsafe {
             // SAFETY: the guard guarantees that the we own the object
@@ -429,6 +439,7 @@ impl<T, TAG> DerefMut for ShardedMutexGuard<'_, T, TAG>
 where
     T: AssocObjects<TAG>,
 {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
             // SAFETY: the guard gurantees that the we own the object
@@ -441,6 +452,7 @@ impl<T, TAG> AsRef<T> for ShardedMutexGuard<'_, T, TAG>
 where
     T: AssocObjects<TAG>,
 {
+    #[inline]
     fn as_ref(&self) -> &T {
         unsafe {
             // SAFETY: the guard gurantees that the we own the object
@@ -453,6 +465,7 @@ impl<T, TAG> AsMut<T> for ShardedMutexGuard<'_, T, TAG>
 where
     T: AssocObjects<TAG>,
 {
+    #[inline]
     fn as_mut(&mut self) -> &mut T {
         unsafe {
             // SAFETY: the guard gurantees that the we own the object
@@ -465,6 +478,7 @@ impl<T, TAG> Drop for ShardedMutexGuard<'_, T, TAG>
 where
     T: AssocObjects<TAG>,
 {
+    #[cfg_attr(not(debug_assertions), inline)]
     fn drop(&mut self) {
         #[cfg(debug_assertions)]
         Self::deadlock_decrement_lock_count();
