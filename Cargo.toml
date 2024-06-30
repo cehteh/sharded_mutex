@@ -1,6 +1,6 @@
 [package]
 name = "sharded_mutex"
-version = "1.2.2"
+version = "2.0.0"
 authors = ["Christian Thäter <ct@pipapo.org>"]
 edition = "2021"
 description = "No per-object memory overhead locks. Pseudo atomic ops for Copy/PartialEq types."
@@ -9,10 +9,10 @@ repository = "https://github.com/cehteh/sharded_mutex.git"
 keywords = ["locking", "concurrency"]
 categories = ["concurrency", "rust-patterns"]
 readme = "README.md"
-rust-version = "1.56.1"
+rust-version = "1.79.0"
 
 [dependencies]
-parking_lot = "0.11"
+parking_lot = "0.12"
 assoc_static = "1.0.0"
 assoc_threadlocal = "0.0.1"
 
