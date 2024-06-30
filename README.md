@@ -1,4 +1,4 @@
-# ShardedMutex, atomic Everything
+# `ShardedMutex`, atomic Everything
 
 This library provides global locks for (pseudo-) atomic access to data without memory overhead
 per object. Concurrency is improved by selecting a Mutex from a pool based on the Address of
@@ -9,7 +9,7 @@ lock another object while a lock on the same type/domain is already hold, otherw
 will happen.
 
 There is one pool of mutexes per guarded type, thus it is possible to lock values of different
-types at the same time. Further a 'multi_lock' API allows to obtain locks on multiple objects
+types at the same time. Further a `multi_lock` API allows to obtain locks on multiple objects
 of the same type at the same time.
 
 Same types may have different locking domains using type tags.
@@ -65,27 +65,27 @@ assert_eq!(x.load(), 456);
 
 # Features
 
-ShardedMutex using arrays of 127 mutexes for locking objects. This would pack Mutexes for
+`ShardedMutex` using arrays of 127 mutexes for locking objects. This would pack Mutexes for
 unrelated objects pretty close together which in turn impacts performance because of false
 cache sharing. To alleviate this problem the internal aligment of these mutexes can be
 increased. The cost for this is a larger memory footprint.
 
-## *align_none*
+## *`align_none`*
 
 Packs Mutexes as tight as possible. Good for embedded systems that have only little caches or
 none at all and memory is premium.
 
-## *align_narrow*
+## *`align_narrow`*
 
 This is the **default**, it places 8 Mutexes per cacheline which should be a good compromise
 between space and performance.
 
-## *align_wide*
+## *`align_wide`*
 
 Places 4 mutexes per cacheline, should improve performance even further. Probably only
 necessary when its proven that there is cache contention.
 
-## *align_cacheline*
+## *`align_cacheline`*
 
 Places one mutex per cacheline. This should give the best performance without any
 cache contention, on the cost of wasting memory.

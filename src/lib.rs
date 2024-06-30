@@ -6,6 +6,7 @@ use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::ptr;
 
 #[doc(hidden)]
 pub use assoc_static::{assoc_static, AssocStatic};
@@ -103,10 +104,7 @@ pub struct LockCount(pub usize);
 /// for debug builds this includes a LockCount as well.
 #[doc(hidden)]
 #[cfg(debug_assertions)]
-trait AssocObjects<TAG>:
-    AssocStatic<MutexPool, TAG> + AssocThreadLocal<LockCount, TAG>
-{
-}
+trait AssocObjects<TAG>: AssocStatic<MutexPool, TAG> + AssocThreadLocal<LockCount, TAG> {}
 
 #[cfg(debug_assertions)]
 impl<T, TAG> AssocObjects<TAG> for T where
@@ -195,7 +193,7 @@ where
             // SAFETY: modulo constrains the length
             <T as AssocStatic<MutexPool, TAG>>::get_static()
                 .0
-                .get_unchecked(self as *const Self as usize % POOL_SIZE)
+                .get_unchecked(ptr::from_ref(self) as usize % POOL_SIZE)
         }
     }
 
@@ -246,7 +244,7 @@ where
     /// as this will deadlock. In debug builds this is asserted.
     ///
     /// The array of references should be reasonably small and must be smaller than 257.
-    #[allow(private_bounds)]
+    #[allow(clippy::missing_panics_doc)]
     pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N] {
         const { assert!(N < 257, "The array size must be less than 257") };
         #[cfg(debug_assertions)]
@@ -256,17 +254,15 @@ where
         // locking order and will never deadlock (as long the current thread doesn't already
         // hold a lock)
         let mut locks = objects.map(ShardedMutex::get_mutex);
-        locks.sort_by(|a, b| {
-            (*a as *const RawMutexRc as usize).cmp(&(*b as *const RawMutexRc as usize))
-        });
+        locks.sort_by_key(|a| ptr::from_ref(*a) as usize);
 
         // lock in order with consecutive same locks only incrementing the reference count
         for i in 0..locks.len() {
             // SAFETY: we iterate to .len()
             unsafe {
                 if i == 0
-                    || *locks.get_unchecked(i - 1) as *const RawMutexRc
-                        != *locks.get_unchecked(i) as *const RawMutexRc
+                    || ptr::from_ref(*locks.get_unchecked(i - 1))
+                        != ptr::from_ref(*locks.get_unchecked(i))
                 {
                     locks.get_unchecked(i).lock();
                 } else {
@@ -284,7 +280,7 @@ where
     /// arguments when the locks could be obtained and `None` when locking failed.
     ///
     /// The array of references should be reasonably small and must be smaller than 257.
-    #[allow(private_bounds)]
+    #[allow(clippy::missing_panics_doc)]
     pub fn try_multi_lock<const N: usize>(
         objects: [&Self; N],
     ) -> Option<[ShardedMutexGuard<T, TAG>; N]> {
@@ -293,17 +289,15 @@ where
         // locking order and will never deadlock (as long the current thread doesn't already
         // hold a lock)
         let mut locks = objects.map(ShardedMutex::get_mutex);
-        locks.sort_by(|a, b| {
-            (*a as *const RawMutexRc as usize).cmp(&(*b as *const RawMutexRc as usize))
-        });
+        locks.sort_by_key(|a| ptr::from_ref(*a) as usize);
 
         // lock in order with consecutive same locks only incrementing the reference count
         for i in 0..locks.len() {
             // SAFETY: we iterate to .len()
             unsafe {
                 if i == 0
-                    || *locks.get_unchecked(i - 1) as *const RawMutexRc
-                        != *locks.get_unchecked(i) as *const RawMutexRc
+                    || ptr::from_ref(*locks.get_unchecked(i - 1))
+                        != ptr::from_ref(*locks.get_unchecked(i))
                 {
                     if !locks.get_unchecked(i).try_lock() {
                         // unlock all already obtained locks and bail out
