@@ -222,6 +222,7 @@ where
     }
 
     #[cfg(debug_assertions)]
+    #[cfg_attr(test, mutants::skip)]
     fn deadlock_check_before_locking() {
         assert_eq!(
             <T as AssocThreadLocal<LockCount, TAG>>::get_threadlocal(),
@@ -267,6 +268,7 @@ where
     ///
     /// The array of references should be reasonably small and must be smaller than 257.
     #[allow(clippy::missing_panics_doc)]
+    #[cfg_attr(test, mutants::skip)]
     pub fn multi_lock<const N: usize>(objects: [&Self; N]) -> [ShardedMutexGuard<T, TAG>; N] {
         const { assert!(N < 257, "The array size must be less than 257") };
         #[cfg(debug_assertions)]
@@ -303,6 +305,7 @@ where
     ///
     /// The array of references should be reasonably small and must be smaller than 257.
     #[allow(clippy::missing_panics_doc)]
+    #[cfg_attr(test, mutants::skip)]
     pub fn try_multi_lock<const N: usize>(
         objects: [&Self; N],
     ) -> Option<[ShardedMutexGuard<T, TAG>; N]> {
@@ -601,7 +604,46 @@ sharded_mutex!(String);
 
 #[cfg(test)]
 mod tests {
-    use crate::ShardedMutex;
+    use crate::*;
+
+    #[test]
+    fn test_raw_try_lock() {
+        let rawmutex = MUTEXRC_INIT;
+        rawmutex.lock();
+        assert!(rawmutex.0.is_locked());
+        assert!(!rawmutex.try_lock());
+        unsafe {
+            rawmutex.again();
+            assert!(rawmutex.0.is_locked());
+            assert_eq!(*rawmutex.1.get(), 1);
+            rawmutex.unlock();
+            assert_eq!(*rawmutex.1.get(), 0);
+            assert!(rawmutex.0.is_locked());
+            rawmutex.unlock();
+        }
+        assert!(!rawmutex.0.is_locked());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_raw_try_lock_for() {
+        let rawmutex = MUTEXRC_INIT;
+        assert!(rawmutex.try_lock_for(Duration::from_micros(10)));
+        assert!(rawmutex.0.is_locked());
+        assert!(!rawmutex.try_lock_for(Duration::from_micros(10)));
+        unsafe {
+            rawmutex.unlock();
+        }
+        assert!(!rawmutex.0.is_locked());
+    }
+
+    #[test]
+    fn test_size() {
+        assert_eq!(
+            std::mem::size_of::<ShardedMutex<u64>>(),
+            std::mem::size_of::<u64>()
+        );
+    }
 
     #[test]
     fn smoke() {
@@ -620,6 +662,19 @@ mod tests {
         drop(guard);
 
         assert_eq!(*x.lock(), 234);
+    }
+
+    #[test]
+    fn try_lock() {
+        let x = ShardedMutex::new(123);
+        assert_eq!(*x.try_lock().unwrap(), 123);
+
+        let mut guard = x.try_lock().unwrap();
+
+        *guard = 234;
+        drop(guard);
+
+        assert_eq!(*x.try_lock().unwrap(), 234);
     }
 
     #[test]
