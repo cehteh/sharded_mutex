@@ -81,8 +81,9 @@ macro_rules! sharded_mutex {
     };
 }
 
-/// Wraps a 'T' that can only be accessed through global mutexes at zero memory overhead per object.
-/// The optional 'TAG' is used to create locking domains which share locks.
+/// Wraps a 'T' that can only be accessed through global mutexes at zero memory overhead per
+/// object.  The optional 'TAG' is used to create locking domains which share locks. This
+/// structure is `#[repr(transparent)]`.
 #[derive(Debug)]
 #[repr(transparent)]
 pub struct ShardedMutex<T, TAG = ()>(UnsafeCell<T>, PhantomData<TAG>)
