@@ -4,13 +4,17 @@ This library provides global locks for (pseudo-) atomic access to data without m
 per object. Concurrency is improved by selecting a Mutex from a pool based on the Address of
 the object to be locked.
 
-Even being sharded, these Mutexes act still as global and non-recursive locks. One must not
-lock another object while a lock on the same type/domain is already hold, otherwise deadlocks
-will happen.
-
 There is one pool of mutexes per guarded type, thus it is possible to lock values of different
-types at the same time. Further a `multi_lock` API allows to obtain locks on multiple objects
-of the same type at the same time.
+types at the same time.
+
+* Being sharded, these Mutexes act still as global and non-recursive locks. One must not
+  `lock()` another object while a lock on the same type/domain is already hold, otherwise deadlocks
+  will happen. The `try_lock()` and `try_lock_for()` methods do not have this limitation but
+  will fail when the lock is already hold.
+* The `multi_lock()` methods allow to obtain locks on multiple objects of the same type at the same
+  time.
+* The `then_lock()` method implements hand-over-hand locking where the lock of a new object is
+  obtained before an lock already hold is dropped.
 
 Same types may have different locking domains using type tags.
 

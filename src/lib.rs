@@ -7,6 +7,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr;
+use std::time::Duration;
 
 #[doc(hidden)]
 pub use assoc_static::{assoc_static, AssocStatic};
@@ -16,6 +17,7 @@ pub use assoc_threadlocal::{assoc_threadlocal, AssocThreadLocal};
 #[doc(hidden)]
 pub use parking_lot;
 use parking_lot::lock_api::RawMutex as RawMutexTrait;
+use parking_lot::lock_api::RawMutexTimed as RawMutexTimedTrait;
 use parking_lot::RawMutex;
 
 /// Every type that is used within a `ShardedMutex` needs to implement some boilerplate
@@ -155,6 +157,12 @@ impl RawMutexRc {
         self.0.try_lock()
     }
 
+    /// Tries to lock the Mutex within some time
+    #[inline]
+    fn try_lock_for(&self, timeout: Duration) -> bool {
+        self.0.try_lock_for(timeout)
+    }
+
     /// Increments the reference count. The mutex must be locked already.
     ///
     /// SAFETY: The mutex must be locked in the current context
@@ -197,6 +205,11 @@ where
         }
     }
 
+    #[inline]
+    fn mutex_addr(&self) -> usize {
+        ptr::from_ref(self.get_mutex()) as usize
+    }
+
     /// Create a new `ShardedMutex` from the given value.
     pub fn new(value: T) -> Self {
         ShardedMutex(UnsafeCell::new(value), PhantomData)
@@ -234,6 +247,14 @@ where
     pub fn try_lock(&self) -> Option<ShardedMutexGuard<T, TAG>> {
         self.get_mutex()
             .try_lock()
+            .then(|| ShardedMutexGuard::new(self))
+    }
+
+    /// Tries to acquire a global sharded lock guard with unlock on drop semantics and timeout
+    #[inline]
+    pub fn try_lock_for(&self, timeout: Duration) -> Option<ShardedMutexGuard<T, TAG>> {
+        self.get_mutex()
+            .try_lock_for(timeout)
             .then(|| ShardedMutexGuard::new(self))
     }
 
@@ -380,6 +401,7 @@ where
 /// The guard returned from locking a `ShardedMutex`. Dropping this will unlock the mutex.
 /// Access to the underlying value is done by dereferencing this guard.
 #[allow(private_bounds)]
+#[derive(Debug)]
 pub struct ShardedMutexGuard<'a, T, TAG>(&'a ShardedMutex<T, TAG>)
 where
     T: AssocObjects<TAG>;
@@ -407,6 +429,82 @@ where
     fn deadlock_decrement_lock_count() {
         let LockCount(n) = <T as AssocThreadLocal<LockCount, TAG>>::get_threadlocal();
         <T as AssocThreadLocal<LockCount, TAG>>::set_threadlocal(LockCount(n - 1));
+    }
+
+    /// Hand-over-hand locking, locks another `ShardedMutex`, then unlocks the mutex hold by
+    /// the `self` guard.  This can result in a deadlock because the locking order of the
+    /// underlying mutexes is not known.  To resolve this we use a timeouts and ordering.  The
+    /// `fwd` is the timeout used when the new mutex is at a higher address, `bwd` is used
+    /// when the new mutex is at a lower address than the mutex locked by `self`. The reason
+    /// to have two timeouts here is that one can use long timeouts in `fwd` direction,
+    /// mutexes locked this order will never deadlock and block then until the lock is
+    /// acquired. For the 'bwd' direction the timeout should be short enough to resolve a
+    /// deadlock in reasonable time.  This ordering is globally across all mutexes, not per
+    /// pool. This allows hand-over-hand locking of sharded mutexes holding different types.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(ShardedMutexGuard<U, UTAG>)` with the new acquired lock.
+    /// When `new` is the same mutex as `self` refers to, then `Ok(self)` is returned.
+    ///
+    /// # Errors
+    ///
+    /// `Err(self)` with the old lock still held, when the new lock was not acquired
+    ///
+    /// When this function returns an 'Err' a deadlock could be the cause, it the
+    /// responsibility of the caller to resolve this. Usually this is done by undo any changes
+    /// in the object that is hold by `self`, then drop `self` and then retry the whole
+    /// operation. A error would also be returned when the new lock was not acquired within the
+    /// timeout.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use sharded_mutex::*;
+    /// use std::time::Duration;
+    ///
+    /// let x = ShardedMutex::new(123);
+    /// let y = ShardedMutex::new(23.4);
+    ///
+    /// let mut guard_x = x.lock();
+    /// let guard_y = guard_x.then_lock(&y, Duration::from_secs(1), Duration::from_millis(100)).unwrap();
+    /// let guard_again = guard_y.then_lock(&y, Duration::from_secs(1), Duration::from_millis(100)).unwrap();
+    /// ```
+    pub fn then_lock<U, UTAG>(
+        self,
+        new: &'a ShardedMutex<U, UTAG>,
+        fwd: Duration,
+        bwd: Duration,
+    ) -> Result<ShardedMutexGuard<U, UTAG>, ShardedMutexGuard<T, TAG>>
+    where
+        U: AssocObjects<UTAG>,
+    {
+        match self.0.mutex_addr().cmp(&new.mutex_addr()) {
+            std::cmp::Ordering::Equal => {
+                // SAFETY: exactly the same mutex, return self, needs transmute for the T->U conversion
+                Ok(unsafe {
+                    std::mem::transmute::<ShardedMutexGuard<T, TAG>, ShardedMutexGuard<U, UTAG>>(
+                        self,
+                    )
+                })
+            }
+            std::cmp::Ordering::Greater => {
+                // new is at a lower address than self
+                if let Some(success) = new.try_lock_for(bwd) {
+                    Ok(success)
+                } else {
+                    Err(self)
+                }
+            }
+            std::cmp::Ordering::Less => {
+                // new is at a higher address than self
+                if let Some(success) = new.try_lock_for(fwd) {
+                    Ok(success)
+                } else {
+                    Err(self)
+                }
+            }
+        }
     }
 }
 

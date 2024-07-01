@@ -13,11 +13,11 @@ fn simple_i32() {
     assert_eq!(*x.lock(), 234);
 }
 
+struct TestTag;
+sharded_mutex!(TestTag: Option<bool>);
+
 #[test]
 fn std_types_needs_tag() {
-    struct TestTag;
-    sharded_mutex!(TestTag: Option<bool>);
-
     let x = ShardedMutex::new(Some(true));
     assert_eq!(*x.lock(), Some(true));
 }
