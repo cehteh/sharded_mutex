@@ -69,27 +69,52 @@ assert_eq!(x.load(), 456);
 
 # Features
 
-`ShardedMutex` using arrays of 127 mutexes for locking objects. This would pack Mutexes for
+## Alignment
+
+`ShardedMutex` using arrays of mutexes for locking objects. This would pack Mutexes for
 unrelated objects pretty close together which in turn impacts performance because of false
 cache sharing. To alleviate this problem the internal aligment of these mutexes can be
 increased. The cost for this is a larger memory footprint.
 
-## *`align_none`*
+### *`align_none`*
 
 Packs Mutexes as tight as possible. Good for embedded systems that have only little caches or
 none at all and memory is premium.
 
-## *`align_narrow`*
+### *`align_narrow`*
 
 This is the **default**, it places 8 Mutexes per cacheline which should be a good compromise
 between space and performance.
 
-## *`align_wide`*
+### *`align_wide`*
 
 Places 4 mutexes per cacheline, should improve performance even further. Probably only
 necessary when its proven that there is cache contention.
 
-## *`align_cacheline`*
+### *`align_cacheline`*
 
 Places one mutex per cacheline. This should give the best performance without any
 cache contention, on the cost of wasting memory.
+
+
+## Pool Sizes
+
+Locking performs best when there is little contention on the mutexes. We do this by sharding
+accesses over pools of mutexes. The size of these pools can be adjusted to the expected number
+of threads that will access the mutexes concurrently. The pool sizes are mersenne-prime
+numbers for spreading the load evenly over the mutexes.
+
+### *`normal_pool_size`*
+
+Mutex pools have 127 entries. This should be good enough for most applications. This is the
+default.
+
+### *`small_pool_size`*
+
+Mutex pools have 31 entries. This may serverly limit concurrency. Use it only when memory is
+at premium (embedded) or only few threads try to lock objects.
+
+### *`huge_pool_size`*
+
+Mutex pools have 8191 entries. To be used for massively concurrent systems with many cores
+where hundreds to thousands of threads locking objects concurrently.

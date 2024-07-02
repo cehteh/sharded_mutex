@@ -121,11 +121,19 @@ pub trait AssocObjects<TAG>: AssocStatic<MutexPool, TAG> {}
 #[cfg(not(debug_assertions))]
 impl<T, TAG> AssocObjects<TAG> for T where T: AssocStatic<MutexPool, TAG> {}
 
+// PLANNED: eventually pools will become const-generic on the size
 /// Only exported for macro use
-// NOTE: must be less than 256, We use u8 as refcount below, we use our favorite mersenne prime to spread
-// objects fairly uniformly on these mutexes.
+#[cfg(feature = "normal_pool_size")]
 #[doc(hidden)]
 pub const POOL_SIZE: usize = 127;
+
+#[cfg(feature = "small_pool_size")]
+#[doc(hidden)]
+pub const POOL_SIZE: usize = 31;
+
+#[cfg(feature = "huge_pool_size")]
+#[doc(hidden)]
+pub const POOL_SIZE: usize = 8191;
 
 /// Mutex with a reference count. This are not recursive mutexes!
 /// Only exported for macro use

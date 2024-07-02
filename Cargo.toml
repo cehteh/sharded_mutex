@@ -18,12 +18,16 @@ assoc_threadlocal = "0.0.1"
 
 [features]
 
-default = ["align_narrow"]
+default = ["align_narrow", "normal_pool_size"]
 
 align_none = []
 align_narrow = []
 align_wide = []
 align_cacheline = []
+
+small_pool_size = []
+normal_pool_size = []
+huge_pool_size = []
 
 [badges]
 maintenance = { status = "actively-developed" }
