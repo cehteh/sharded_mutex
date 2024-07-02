@@ -437,14 +437,7 @@ where
 
     /// Hand-over-hand locking, locks another `ShardedMutex`, then unlocks the mutex hold by
     /// the `self` guard.  This can result in a deadlock because the locking order of the
-    /// underlying mutexes is not known.  To resolve this we use a timeouts and ordering.  The
-    /// `fwd` is the timeout used when the new mutex is at a higher address, `bwd` is used
-    /// when the new mutex is at a lower address than the mutex locked by `self`. The reason
-    /// to have two timeouts here is that one can use long timeouts in `fwd` direction,
-    /// mutexes locked this order will never deadlock and block then until the lock is
-    /// acquired. For the 'bwd' direction the timeout should be short enough to resolve a
-    /// deadlock in reasonable time.  This ordering is globally across all mutexes, not per
-    /// pool. This allows hand-over-hand locking of sharded mutexes holding different types.
+    /// underlying mutexes is not known.  To resolve this we use a timeout.
     ///
     /// # Returns
     ///
@@ -471,43 +464,26 @@ where
     /// let y = ShardedMutex::new(23.4);
     ///
     /// let mut guard_x = x.lock();
-    /// let guard_y = guard_x.then_lock(&y, Duration::from_secs(1), Duration::from_millis(100)).unwrap();
-    /// let guard_again = guard_y.then_lock(&y, Duration::from_secs(1), Duration::from_millis(100)).unwrap();
+    /// let guard_y = guard_x.then_lock(&y, Duration::from_millis(100)).unwrap();
+    /// let guard_again = guard_y.then_lock(&y, Duration::from_millis(100)).unwrap();
     /// ```
     pub fn then_lock<U, UTAG>(
         self,
         new: &'a ShardedMutex<U, UTAG>,
-        fwd: Duration,
-        bwd: Duration,
+        timeout: Duration,
     ) -> Result<ShardedMutexGuard<U, UTAG>, ShardedMutexGuard<T, TAG>>
     where
         U: AssocObjects<UTAG>,
     {
-        match self.0.mutex_addr().cmp(&new.mutex_addr()) {
-            std::cmp::Ordering::Equal => {
-                // SAFETY: exactly the same mutex, return self, needs transmute for the T->U conversion
-                Ok(unsafe {
-                    std::mem::transmute::<ShardedMutexGuard<T, TAG>, ShardedMutexGuard<U, UTAG>>(
-                        self,
-                    )
-                })
-            }
-            std::cmp::Ordering::Greater => {
-                // new is at a lower address than self
-                if let Some(success) = new.try_lock_for(bwd) {
-                    Ok(success)
-                } else {
-                    Err(self)
-                }
-            }
-            std::cmp::Ordering::Less => {
-                // new is at a higher address than self
-                if let Some(success) = new.try_lock_for(fwd) {
-                    Ok(success)
-                } else {
-                    Err(self)
-                }
-            }
+        if self.0.mutex_addr() == new.mutex_addr() {
+            // SAFETY: exactly the same mutex, return self, needs transmute for the T->U conversion
+            Ok(unsafe {
+                std::mem::transmute::<ShardedMutexGuard<T, TAG>, ShardedMutexGuard<U, UTAG>>(self)
+            })
+        } else if let Some(success) = new.try_lock_for(timeout) {
+            Ok(success)
+        } else {
+            Err(self)
         }
     }
 }
@@ -670,6 +646,7 @@ mod tests {
         assert_eq!(*x.try_lock().unwrap(), 123);
 
         let mut guard = x.try_lock().unwrap();
+        assert!(x.try_lock().is_none());
 
         *guard = 234;
         drop(guard);
