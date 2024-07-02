@@ -473,10 +473,10 @@ where
     /// let y = ShardedMutex::new(23.4);
     ///
     /// let mut guard_x = x.lock();
-    /// let guard_y = guard_x.then_lock(&y, Duration::from_millis(100)).unwrap();
-    /// let guard_again = guard_y.then_lock(&y, Duration::from_millis(100)).unwrap();
+    /// let guard_y = guard_x.then_try_lock_for(&y, Duration::from_millis(100)).unwrap();
+    /// let guard_again = guard_y.then_try_lock_for(&y, Duration::from_millis(100)).unwrap();
     /// ```
-    pub fn then_lock<U, UTAG>(
+    pub fn then_try_lock_for<U, UTAG>(
         self,
         new: &'a ShardedMutex<U, UTAG>,
         timeout: Duration,
@@ -494,6 +494,19 @@ where
         } else {
             Err(self)
         }
+    }
+
+    #[doc(hidden)]
+    #[deprecated = "Use then_try_lock instead"]
+    pub fn then_lock<U, UTAG>(
+        self,
+        new: &'a ShardedMutex<U, UTAG>,
+        timeout: Duration,
+    ) -> Result<ShardedMutexGuard<U, UTAG>, ShardedMutexGuard<T, TAG>>
+    where
+        U: AssocObjects<UTAG>,
+    {
+        self.then_try_lock_for(new, timeout)
     }
 }
 
