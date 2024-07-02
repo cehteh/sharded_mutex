@@ -47,4 +47,9 @@ semicolon_if_nothing_returned = "warn"
 missing_crate_level_docs = "warn"
 
 [dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
 mutants = "0.0.3"
+
+[[bench]]
+name = "mutex_bench"
+harness = false
