@@ -432,6 +432,7 @@ where
     }
 
     #[cfg(debug_assertions)]
+    #[cfg_attr(test, mutants::skip)]
     fn deadlock_increment_lock_count() {
         let LockCount(n) = <T as AssocThreadLocal<LockCount, TAG>>::get_threadlocal();
         <T as AssocThreadLocal<LockCount, TAG>>::set_threadlocal(LockCount(n + 1));
