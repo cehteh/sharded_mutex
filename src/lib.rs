@@ -219,12 +219,32 @@ where
         ptr::from_ref(self.get_mutex()) as usize
     }
 
-    /// Create a new `ShardedMutex` from the given value.
-    pub fn new(value: T) -> Self {
+    /// Create a new `ShardedMutex` from the given value. This is a const fn and can be used
+    /// in statics and const contexts.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use sharded_mutex::*;
+    ///
+    /// let x = ShardedMutex::new(123);
+    /// assert_eq!(*x.lock(), 123);
+    /// ```
+    pub const fn new(value: T) -> Self {
         ShardedMutex(UnsafeCell::new(value), PhantomData)
     }
 
-    /// Create a new `ShardedMutex` from the given value and tag.
+    /// Create a new `ShardedMutex` from the given value and tag. For construction a
+    /// static/const `ShardedMutex` with a tag one an use `ShardedMutex::new()` with type
+    /// annotations:
+    ///
+    /// ```
+    /// # use sharded_mutex::*;
+    /// struct MyTag;
+    /// sharded_mutex!(MyTag: i32);
+    /// static X: ShardedMutex<i32, MyTag> = ShardedMutex::<i32, MyTag>::new(123);
+    /// assert_eq!(*X.lock(), 123);
+    /// ```
     pub fn new_with_tag(value: T, _: TAG) -> Self {
         ShardedMutex(UnsafeCell::new(value), PhantomData)
     }
@@ -241,7 +261,7 @@ where
 
     /// Acquire a global sharded lock guard with unlock on drop semantics
     ///
-    /// **SAFETY:** The current thread must not hold any sharded locks of the same type/domain
+    /// The current thread must not hold any sharded locks of the same type/domain
     /// as this will deadlock
     #[cfg_attr(not(debug_assertions), inline)]
     pub fn lock(&self) -> ShardedMutexGuard<T, TAG> {
