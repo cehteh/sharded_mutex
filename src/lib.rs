@@ -215,8 +215,8 @@ where
     }
 
     #[inline]
-    fn mutex_addr(&self) -> usize {
-        ptr::from_ref(self.get_mutex()) as usize
+    fn mutex_addr(&self) -> *const () {
+        ptr::from_ref(self.get_mutex()).cast::<()>()
     }
 
     /// Create a new `ShardedMutex` from the given value. This is a const fn and can be used
@@ -504,7 +504,7 @@ where
     where
         U: AssocObjects<UTAG>,
     {
-        if self.0.mutex_addr() == new.mutex_addr() {
+        if std::ptr::eq(self.0.mutex_addr(),new.mutex_addr()) {
             // SAFETY: exactly the same mutex, return self, needs transmute for the T->U conversion
             Ok(unsafe {
                 std::mem::transmute::<ShardedMutexGuard<T, TAG>, ShardedMutexGuard<U, UTAG>>(self)
