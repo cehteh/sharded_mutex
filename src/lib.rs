@@ -500,7 +500,7 @@ where
         self,
         new: &'a ShardedMutex<U, UTAG>,
         timeout: Duration,
-    ) -> Result<ShardedMutexGuard<U, UTAG>, ShardedMutexGuard<T, TAG>>
+    ) -> Result<ShardedMutexGuard<'a, U, UTAG>, ShardedMutexGuard<'a, T, TAG>>
     where
         U: AssocObjects<UTAG>,
     {
@@ -522,7 +522,7 @@ where
         self,
         new: &'a ShardedMutex<U, UTAG>,
         timeout: Duration,
-    ) -> Result<ShardedMutexGuard<U, UTAG>, ShardedMutexGuard<T, TAG>>
+    ) -> Result<ShardedMutexGuard<'a, U, UTAG>, ShardedMutexGuard<'a, T, TAG>>
     where
         U: AssocObjects<UTAG>,
     {
