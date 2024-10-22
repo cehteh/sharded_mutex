@@ -89,30 +89,40 @@ between space and performance.
 ### *`align_wide`*
 
 Places 4 mutexes per cacheline, should improve performance even further. Probably only
-necessary when its proven that there is cache contention.
+necessary when it is proven that there is cache contention.
 
 ### *`align_cacheline`*
 
 Places one mutex per cacheline. This should give the best performance without any
-cache contention, on the cost of wasting memory.
+cache contention, on the cost of wasting a lot memory.
 
 
 ## Pool Sizes
 
 Locking performs best when there is little contention on the mutexes. We do this by sharding
 accesses over pools of mutexes. The size of these pools can be adjusted to the expected number
-of threads that will access the mutexes concurrently. The pool sizes are mersenne-prime
-numbers for spreading the load evenly over the mutexes.
+of threads that will access the mutexes concurrently. The pool sizes are powers of two minus
+one (or even mersenne-primes) for spreading the load evenly over the mutexes.
 
 ### *`normal_pool_size`*
 
 Mutex pools have 127 entries. This should be good enough for most applications. This is the
 default.
 
+### *`tiny_pool_size`*
+
+Mutex pools have 7 entries. This serverly limits concurrency. Use it only when memory is
+at premium (embedded) and only very few threads try to lock objects.
+
 ### *`small_pool_size`*
 
-Mutex pools have 31 entries. This may serverly limit concurrency. Use it only when memory is
+Mutex pools have 31 entries. This may limit concurrency. Use it only when memory is
 at premium (embedded) or only few threads try to lock objects.
+
+### *`big_pool_size`*
+
+Mutex pools have 511 entries. To be used for highly concurrent systems with many cores
+where hundreds of threads locking objects concurrently.
 
 ### *`huge_pool_size`*
 

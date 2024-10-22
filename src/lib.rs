@@ -127,9 +127,17 @@ impl<T, TAG> AssocObjects<TAG> for T where T: AssocStatic<MutexPool, TAG> {}
 #[doc(hidden)]
 pub const POOL_SIZE: usize = 127;
 
+#[cfg(feature = "tiny_pool_size")]
+#[doc(hidden)]
+pub const POOL_SIZE: usize = 7;
+
 #[cfg(feature = "small_pool_size")]
 #[doc(hidden)]
 pub const POOL_SIZE: usize = 31;
+
+#[cfg(feature = "big_pool_size")]
+#[doc(hidden)]
+pub const POOL_SIZE: usize = 511;
 
 #[cfg(feature = "huge_pool_size")]
 #[doc(hidden)]
